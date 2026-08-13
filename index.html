@@ -124,7 +124,7 @@ label{font-size:12px;color:#6b6b70;display:block;margin-bottom:4px;margin-top:8p
   </div>
 
   <div class="card">
-    <div style="font-size:12px;color:#6b6b70;margin-bottom:8px">Tape l'entrée et appuie sur Entrée</div>
+    <div style="font-size:12px;color:#6b6b70;margin-bottom:8px">Tape l'entrée et appuie sur Entrée<br>Pour une date passée, ajoute-la à la fin : <code>hier</code>, <code>lundi</code>, <code>12/08</code></div>
     <input type="text" id="hero-input" placeholder="ex: Bière -3000  ou  Salaire +580000" autocomplete="off">
     <div id="shortcuts-lite" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
     <div id="hero-preview" style="font-size:12px;color:#6b6b70;margin-top:8px;min-height:16px"></div>
@@ -172,8 +172,9 @@ label{font-size:12px;color:#6b6b70;display:block;margin-bottom:4px;margin-top:8p
       <div id="shortcuts-pro" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#6b6b70">
         <span id="hero-preview-pro"></span>
-        <span>Date : <input type="date" id="f-date" style="width:auto;padding:4px 8px;font-size:13px;display:inline-block"></span>
+        <span>Date : <input type="date" id="f-date" onchange="updateDateFlag()" style="width:auto;padding:4px 8px;font-size:13px;display:inline-block"></span>
       </div>
+      <div id="date-flag" class="alert alert-warn" style="display:none;margin-top:8px"></div>
       <div id="hero-msg-pro" style="font-size:13px;margin-top:8px;min-height:18px"></div>
     </div>
 
@@ -232,6 +233,13 @@ label{font-size:12px;color:#6b6b70;display:block;margin-bottom:4px;margin-top:8p
           <b>Signe</b><br>
           <code>+</code> = gain · <code>-</code> = dépense<br>
           Sans signe : Salaire/Vente/Perdiem → gain, sinon dépense<br><br>
+          <b>Date (saisie antidatée)</b><br>
+          À écrire en <b>fin</b> de ligne :<br>
+          <code>Bière -3000 hier</code> · <code>avant-hier</code><br>
+          <code>Taxi -2000 lundi</code> (le lundi le plus récent)<br>
+          <code>Achat -50000 12/08</code> · <code>12/08/2025</code><br>
+          <code>Repas -4000 il y a 5 jours</code><br>
+          Sans date : aujourd'hui en Lite, sinon le champ Date.<br><br>
           <b>Répétition (onglet Prévu)</b><br>
           <code>Chambre -15000 pendant 10 jours</code><br>
           <code>Chambre -15000 x10j</code> · <code>x10</code>
@@ -751,10 +759,68 @@ function parsePlannedLine(line){
   base.count = count;
   return base;
 }
-function diagnoseLine(line){
+/* ---------- saisie antidatée ----------
+   Une date peut être écrite en fin de ligne : « Bière -3000 hier », « Taxi -2000 12/08 ».
+   Elle est retirée avant l'analyse du montant, sinon l'ancre de fin de parseQuickLine échoue. */
+var WEEKDAYS = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+function dateFromParts(d, m, y){
+  if(m < 1 || m > 12 || d < 1 || d > 31) return null;
+  var now = new Date();
+  var year = (y == null) ? now.getFullYear() : (y < 100 ? 2000 + y : y);
+  var dt = new Date(year, m - 1, d, 12, 0, 0);
+  if(dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;   // rejette le 31/02
+  if(y == null && dt > now) dt.setFullYear(year - 1);              // sans année : jamais dans le futur
+  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+}
+function stripDate(line){
+  var s = String(line).trim(), m;
+  m = s.match(/^(.*?)[\s,;]+(?:le\s+)?(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\s*$/i);
+  if(m){
+    var d = dateFromParts(parseInt(m[2], 10), parseInt(m[3], 10), m[4] ? parseInt(m[4], 10) : null);
+    if(d) return { rest: m[1].trim(), date: d };
+  }
+  m = s.match(/^(.*?)[\s,;]+avant[-\s]?hier\s*$/i);
+  if(m) return { rest: m[1].trim(), date: addDays(today(), -2) };
+  m = s.match(/^(.*?)[\s,;]+hier\s*$/i);
+  if(m) return { rest: m[1].trim(), date: addDays(today(), -1) };
+  m = s.match(/^(.*?)[\s,;]+(?:aujourd'hui|aujourdhui|auj)\s*$/i);
+  if(m) return { rest: m[1].trim(), date: today() };
+  m = s.match(/^(.*?)[\s,;]+il\s+y\s+a\s+(\d{1,4})\s*(?:j|jours?)\s*$/i);
+  if(m){
+    var n = parseInt(m[2], 10);
+    if(n > 0 && n <= 3650) return { rest: m[1].trim(), date: addDays(today(), -n) };
+  }
+  m = s.match(/^(.*?)[\s,;]+(dimanche|lundi|mardi|mercredi|jeudi|vendredi|samedi)\s*$/i);
+  if(m){
+    var target = WEEKDAYS.indexOf(m[2].toLowerCase());
+    var back = (new Date(today() + 'T12:00').getDay() - target + 7) % 7;
+    return { rest: m[1].trim(), date: addDays(today(), -back) };
+  }
+  return null;
+}
+/* Analyse une ligne en tenant compte d'une éventuelle date écrite dedans.
+   defaultDate s'applique quand la ligne n'en porte pas. */
+function parseEntryLine(line, defaultDate){
+  var rest = String(line).trim(), date = defaultDate || today(), dated = false;
+  var sd = stripDate(rest);
+  if(sd && sd.rest){ rest = sd.rest; date = sd.date; dated = true; }
+  var p = parseQuickLine(rest);
+  if(!p) return null;
+  p.date = date;
+  p.dated = dated;
+  return p;
+}
+function fmtDateFR(d){
+  if(!d) return '';
+  return d.slice(8,10) + '/' + d.slice(5,7) + (d.slice(0,4) === today().slice(0,4) ? '' : '/' + d.slice(0,4));
+}
+/* Suffixe « · le 05/08 » à n'afficher que si la date n'est pas celle du jour. */
+function dateSuffix(d){ return (d && d !== today()) ? ' · le ' + fmtDateFR(d) : ''; }
+
+function diagnoseLine(line, defaultDate){
   var t = String(line).trim();
   if(!t) return null;
-  var p = parseQuickLine(t);
+  var p = parseEntryLine(t, defaultDate);
   if(p) return { ok: true, line: t, p: p };
   var hint = 'montant introuvable';
   if(!/\d/.test(t)) hint = 'aucun chiffre détecté';
@@ -984,17 +1050,18 @@ function checkBudgetAlert(en){
 }
 function saveHero(inpId, msgId, prevId){
   var inp = document.getElementById(inpId), msg = document.getElementById(msgId);
-  var date = (mode === 'lite') ? today() : ((document.getElementById('f-date') || {}).value || today());
-  var p = parseQuickLine(inp.value);
+  var base = (mode === 'lite') ? today() : ((document.getElementById('f-date') || {}).value || today());
+  var p = parseEntryLine(inp.value, base);
   if(!p){ msg.style.color = DEP_COL; msg.textContent = 'Format : Description ±montant'; return; }
-  confirmIfOddAsync(p.amount, date, p.desc + ' — ' + p.cat).then(function(ok){
+  var date = p.date;
+  confirmIfOddAsync(p.amount, date, p.desc + ' — ' + p.cat + dateSuffix(date)).then(function(ok){
     if(!ok) return;
     entries.push({ id: nextId(), date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
     entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
     return save().then(function(){
       var al = checkBudgetAlert({ type: p.type, cat: p.cat, date: date });
       msg.style.color = al ? '#B8741A' : GAIN_COL;
-      msg.textContent = '✓ ' + p.desc + ' — ' + p.cat + ' : ' + (p.type === 'gain' ? '+' : '-') + fmt(p.amount) + al;
+      msg.textContent = '✓ ' + p.desc + ' — ' + p.cat + ' : ' + (p.type === 'gain' ? '+' : '-') + fmt(p.amount) + dateSuffix(date) + al;
       inp.value = '';
       document.getElementById(prevId).textContent = '';
       inp.focus();
@@ -1006,22 +1073,22 @@ function saveHero(inpId, msgId, prevId){
 function saveQuick(){
   var lines = document.getElementById('quick-input').value.split('\n');
   var msg = document.getElementById('quick-msg');
-  var date = document.getElementById('f-date').value || today();
+  var base = document.getElementById('f-date').value || today();
   var parsed = [], fail = 0;
   lines.forEach(function(l){
     if(!l.trim()) return;
-    var p = parseQuickLine(l);
+    var p = parseEntryLine(l, base);   // chaque ligne peut porter sa propre date
     if(p) parsed.push(p); else fail++;
   });
   if(!parsed.length){ msg.style.color = DEP_COL; msg.textContent = 'Format non reconnu.'; return; }
-  var odd = parsed.filter(function(p){ return sanityCheck(p.amount, date).length; });
+  var odd = parsed.filter(function(p){ return sanityCheck(p.amount, p.date).length; });
   var gate = odd.length
-    ? uiConfirm('⚠️ ' + odd.length + ' entrée(s) inhabituelle(s) :\n\n' + odd.slice(0,5).map(function(p){ return '• ' + esc(p.desc) + ' : ' + fmt(p.amount); }).join('\n') + '\n\nEnregistrer ?')
+    ? uiConfirm('⚠️ ' + odd.length + ' entrée(s) inhabituelle(s) :\n\n' + odd.slice(0,5).map(function(p){ return '• ' + esc(p.desc) + ' : ' + fmt(p.amount) + esc(dateSuffix(p.date)); }).join('\n') + '\n\nEnregistrer ?')
     : Promise.resolve(true);
   gate.then(function(ok){
     if(!ok) return;
     parsed.forEach(function(p){
-      entries.push({ id: nextId(), date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
+      entries.push({ id: nextId(), date: p.date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
     });
     entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
     return save().then(function(){
@@ -1033,6 +1100,24 @@ function saveQuick(){
       renderAll();
     });
   });
+}
+/* Le champ Date restait modifié en silence : toutes les saisies suivantes partaient
+   sur l'ancienne date sans que rien ne l'indique. */
+function updateDateFlag(){
+  var el = document.getElementById('f-date'), flag = document.getElementById('date-flag');
+  if(!el || !flag) return;
+  if(el.value && el.value !== today()){
+    flag.style.display = 'block';
+    flag.innerHTML = '📅 Saisies datées du <b>' + esc(el.value) + '</b>, pas aujourd\'hui. ' +
+      '<button class="btn btn-sm" onclick="resetDate()" style="margin-left:4px">Revenir à aujourd\'hui</button>';
+  } else {
+    flag.style.display = 'none';
+  }
+}
+function resetDate(){
+  var el = document.getElementById('f-date');
+  if(el) el.value = today();
+  updateDateFlag();
 }
 function updateCats(){
   var t = document.getElementById('f-type').value;
@@ -1872,15 +1957,19 @@ function setupHero(iId, mId, pId){
     if(e.key === 'Enter'){ e.preventDefault(); saveHero(iId, mId, pId); }
   });
   inp.addEventListener('input', function(){
-    var p = parseQuickLine(this.value);
-    document.getElementById(pId).textContent = p
-      ? '→ ' + p.cat + ' ' + (p.type === 'gain' ? '(gain)' : '(dépense)') + ' · ' + fmt(p.amount)
+    var base = (mode === 'lite') ? today() : ((document.getElementById('f-date') || {}).value || today());
+    var p = parseEntryLine(this.value, base);
+    var el = document.getElementById(pId);
+    el.textContent = p
+      ? '→ ' + p.cat + ' ' + (p.type === 'gain' ? '(gain)' : '(dépense)') + ' · ' + fmt(p.amount) + dateSuffix(p.date)
       : '';
+    el.style.color = (p && p.date !== today()) ? '#B8741A' : '#6b6b70';
   });
 }
 
 document.getElementById('quick-input').addEventListener('input', function(){
-  var diag = this.value.split('\n').map(diagnoseLine).filter(Boolean);
+  var base = (document.getElementById('f-date') || {}).value || today();
+  var diag = this.value.split('\n').map(function(l){ return diagnoseLine(l, base); }).filter(Boolean);
   var okd = diag.filter(function(x){ return x.ok; });
   var g = okd.filter(function(x){ return x.p.type === 'gain'; }).reduce(function(s, x){ return s + x.p.amount; }, 0);
   var d = okd.filter(function(x){ return x.p.type === 'depense'; }).reduce(function(s, x){ return s + x.p.amount; }, 0);
@@ -1891,7 +1980,7 @@ document.getElementById('quick-input').addEventListener('input', function(){
   var det = document.getElementById('quick-detail');
   det.innerHTML = diag.map(function(x){
     return x.ok
-      ? '<div style="font-size:12px;padding:4px 8px;border-left:3px solid ' + (CAT_COLORS[x.p.cat] || '#999') + ';background:#f5f5f7;border-radius:4px;margin-bottom:3px">' + (CAT_ICONS[x.p.cat] || '') + ' <b>' + esc(x.p.desc) + '</b> → ' + x.p.cat + ' · <span class="' + (x.p.type === 'gain' ? 'gain-color' : 'dep-color') + '">' + (x.p.type === 'gain' ? '+' : '-') + fmt(x.p.amount) + '</span></div>'
+      ? '<div style="font-size:12px;padding:4px 8px;border-left:3px solid ' + (CAT_COLORS[x.p.cat] || '#999') + ';background:#f5f5f7;border-radius:4px;margin-bottom:3px">' + (CAT_ICONS[x.p.cat] || '') + ' <b>' + esc(x.p.desc) + '</b> → ' + x.p.cat + ' · <span class="' + (x.p.type === 'gain' ? 'gain-color' : 'dep-color') + '">' + (x.p.type === 'gain' ? '+' : '-') + fmt(x.p.amount) + '</span>' + (x.p.date !== today() ? '<span style="color:#B8741A"> · le ' + fmtDateFR(x.p.date) + '</span>' : '') + '</div>'
       : '<div style="font-size:12px;padding:4px 8px;border-left:3px solid ' + DEP_COL + ';background:#FAECE7;border-radius:4px;margin-bottom:3px">⚠️ <b>' + esc(x.line) + '</b> → ' + x.hint + '</div>';
   }).join('');
 });
@@ -1913,6 +2002,7 @@ function initUI(){
     if(el) el.value = t;
   });
   updateCats();
+  updateDateFlag();
   setupHero('hero-input', 'hero-msg', 'hero-preview');
   setupHero('hero-input-pro', 'hero-msg-pro', 'hero-preview-pro');
   setMode(mode);
