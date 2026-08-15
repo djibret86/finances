@@ -6,12 +6,10 @@
 <title>Gestionnaire Financier</title>
 <style>
 /* ============================================================
-   Gestionnaire Financier — feuille de style v3 (variante claire)
-   Aucune classe, aucun id, aucune structure DOM modifies.
-   Le bloc mode sombre est volontairement absent : le HTML et le JS
-   contiennent encore ~40 couleurs claires en dur (voir couleurs
-   inline et configuration Chart.js). A reactiver seulement apres
-   avoir bascule ces couleurs sur les variables ci-dessous.
+   Gestionnaire Financier — feuille de style v3
+   Toutes les couleurs passent par les variables ci-dessous, y compris
+   celles posees en inline dans le HTML et celles de Chart.js (voir
+   readTheme() dans le script). C'est ce qui rend le mode sombre fiable.
    ============================================================ */
 
 :root{
@@ -49,6 +47,12 @@
   --warn:#B45309;
   --warn-soft:#FDF1DF;
   --warn-line:#E9B266;
+
+  /* Courbes Chart.js (lues par readTheme, pas utilisees par le CSS) */
+  --chart-1:#4A6FA5;
+  --chart-1-fill:rgba(74,111,165,.13);
+  --chart-2:#8E6CB8;
+  --chart-2-fill:rgba(142,108,184,.13);
 
   /* Formes */
   --r-card:20px;
@@ -421,8 +425,74 @@ details[open] summary::after{transform:rotate(-135deg)}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms !important;transition-duration:.001ms !important}
 }
+
+/* ============================================================
+   MODE SOMBRE
+   Ne fonctionne que parce que le HTML et le JS n'utilisent plus
+   aucune couleur en dur : tout passe par ces variables. Avant
+   d'ajouter une couleur ailleurs, ajouter d'abord son jeton ici.
+   ============================================================ */
+@media (prefers-color-scheme:dark){
+  :root{
+    color-scheme:dark;
+
+    --bg:#0B0E13;
+    --surface:#151A22;
+    --surface-2:#1E242E;
+    --surface-3:#191F28;
+    --line:#2C3440;
+    --line-soft:#232A34;
+
+    --text:#F2F5F9;
+    --text-2:#B7C0CD;
+    --text-3:#8B95A3;
+
+    --gain:#12A97A;
+    --gain-strong:#4FD6A8;
+    --gain-soft:rgba(18,169,122,.16);
+    --gain-2:#2BC492;
+
+    --dep:#F0703A;
+    --dep-strong:#FF9A66;
+    --dep-soft:rgba(240,112,58,.16);
+    --dep-2:#FF8A55;
+
+    --sol:#5B8FF9;
+    --sol-2:#84AAFB;
+    --sol-neg:#9B2C2C;
+    --sol-neg-2:#C05252;
+
+    --warn:#E0A458;
+    --warn-soft:rgba(224,164,88,.14);
+    --warn-line:rgba(224,164,88,.5);
+
+    --chart-1:#5B8FF9;
+    --chart-1-fill:rgba(91,143,249,.18);
+    --chart-2:#A98AD4;
+    --chart-2-fill:rgba(169,138,212,.18);
+
+    --sh-1:0 1px 2px rgba(0,0,0,.5);
+    --sh-2:0 12px 36px rgba(0,0,0,.6);
+  }
+  .card{border-color:var(--line-soft)}
+  .card-flat{background:var(--surface-2)}
+  .lite-balance::after{background:radial-gradient(circle,rgba(91,143,249,.14),transparent 65%)}
+  .mode-btn.active,.tab.active{background:var(--sol);color:#0B0E13}
+  .btn-primary{background:var(--sol);color:#08101F;border-color:var(--sol);box-shadow:none}
+  .btn-primary:hover{background:var(--sol-2);border-color:var(--sol-2)}
+  .btn:hover{border-color:#3A4453}
+  .alert-warn{color:var(--warn)}
+  .metric::before{background:linear-gradient(180deg,rgba(255,255,255,.10),transparent 60%)}
+  input:hover,select:hover,textarea:hover,.shortcut-chip:hover{border-color:#3A4453}
+  *::selection{background:rgba(91,143,249,.3)}
+  @media (hover:none){
+    .btn:hover{border-color:var(--line)}
+    .btn-primary:hover{background:var(--sol);border-color:var(--sol)}
+  }
+}
 </style>
-<meta name="theme-color" content="#1a1a1a">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#EEF1F5">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B0E13">
 <meta name="description" content="Suivi des gains, depenses, budgets et previsions en FCFA">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -435,7 +505,7 @@ details[open] summary::after{transform:rotate(-135deg)}
 <body>
 
 <div id="app-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;padding:20px">
-  <div style="background:#fff;border-radius:16px;padding:20px;max-width:400px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,.2)">
+  <div style="background:var(--surface);border-radius:16px;padding:20px;max-width:400px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,.2)">
     <div id="modal-text" style="font-size:14px;line-height:1.6;margin-bottom:14px"></div>
     <div id="modal-input-wrap" style="display:none;margin-bottom:14px">
       <input type="text" id="modal-input">
@@ -448,6 +518,14 @@ details[open] summary::after{transform:rotate(-135deg)}
 </div>
 
 <div id="storage-bar"></div>
+
+<!-- Rappel de sauvegarde : masque tant qu'il n'y a rien a dire. Les donnees
+     vivent en localStorage, l'export JSON est le seul filet. -->
+<div class="alert alert-warn" id="backup-reminder" style="display:none;align-items:center;gap:10px">
+  <span id="backup-reminder-text" style="flex:1;min-width:0"></span>
+  <button class="btn btn-sm" onclick="exportJSON()" style="flex:0 0 auto">Exporter</button>
+  <button class="btn btn-sm" onclick="snoozeBackup()" style="flex:0 0 auto;width:36px;padding:0" title="Plus tard">✕</button>
+</div>
 
 <div class="mode-toggle">
   <button class="mode-btn active" id="btn-lite" onclick="setMode('lite')">Lite</button>
@@ -462,29 +540,30 @@ details[open] summary::after{transform:rotate(-135deg)}
       <span class="gain-color">+<span id="lite-gain"> 0</span></span>
       <span class="dep-color">−<span id="lite-dep"> 0</span></span>
     </div>
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid #d8d8dd;font-size:12px;color:#6b6b70">
-      Solde global cumulé : <b id="lite-global" style="font-size:15px"></b>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--text-3);display:flex;justify-content:space-between;gap:12px;text-align:left">
+      <span id="lite-month-label">Ce mois-ci<br><b id="lite-month" style="font-size:15px"></b></span>
+      <span style="text-align:right">Solde global cumulé<br><b id="lite-global" style="font-size:15px"></b></span>
     </div>
   </div>
 
   <div class="card">
-    <div style="font-size:12px;color:#6b6b70;margin-bottom:8px">Tape l'entrée et appuie sur Entrée<br>Pour une date passée, ajoute-la à la fin : <code>hier</code>, <code>lundi</code>, <code>12/08</code></div>
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:8px">Tape l'entrée et appuie sur Entrée<br>Pour une date passée, ajoute-la à la fin : <code>hier</code>, <code>lundi</code>, <code>12/08</code></div>
     <input type="text" id="hero-input" placeholder="ex: Bière -3000  ou  Salaire +580000" autocomplete="off">
     <div id="shortcuts-lite" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
-    <div id="hero-preview" style="font-size:12px;color:#6b6b70;margin-top:8px;min-height:16px"></div>
+    <div id="hero-preview" style="font-size:12px;color:var(--text-3);margin-top:8px;min-height:16px"></div>
     <div id="hero-msg" style="font-size:13px;margin-top:2px;min-height:18px"></div>
   </div>
 
   <div class="card card-flat" id="lite-budget-widget" style="display:none">
-    <div style="font-size:12px;color:#6b6b70;margin-bottom:4px">Reste à dépenser aujourd'hui</div>
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:4px">Reste à dépenser aujourd'hui</div>
     <div style="font-size:22px;font-weight:600" id="lite-daily-budget"></div>
-    <div style="font-size:11px;color:#6b6b70;margin-top:4px" id="lite-daily-detail"></div>
+    <div style="font-size:11px;color:var(--text-3);margin-top:4px" id="lite-daily-detail"></div>
   </div>
 
   <div class="card" id="lite-planned-banner" style="display:none;cursor:pointer" onclick="setMode('pro');proTab('previsions')">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:13px" id="lite-planned-text"></span>
-      <span style="font-size:13px;color:#6b6b70">→</span>
+      <span style="font-size:13px;color:var(--text-3)">→</span>
     </div>
   </div>
 
@@ -514,7 +593,7 @@ details[open] summary::after{transform:rotate(-135deg)}
     <div class="card">
       <input type="text" id="hero-input-pro" placeholder="ex: Bière -3000  ou  Salaire +580000" autocomplete="off" style="margin-bottom:8px">
       <div id="shortcuts-pro" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#6b6b70">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text-3)">
         <span id="hero-preview-pro"></span>
         <span>Date : <input type="date" id="f-date" onchange="updateDateFlag()" style="width:auto;padding:4px 8px;font-size:13px;display:inline-block"></span>
       </div>
@@ -529,7 +608,7 @@ details[open] summary::after{transform:rotate(-135deg)}
           <textarea id="quick-input" rows="4" placeholder="Bière -3000&#10;Lavage auto -2000"></textarea>
           <div id="quick-detail" style="margin-top:8px"></div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-            <span id="quick-preview" style="font-size:12px;color:#6b6b70"></span>
+            <span id="quick-preview" style="font-size:12px;color:var(--text-3)"></span>
             <button class="btn btn-primary btn-sm" onclick="saveQuick()">Tout enregistrer</button>
           </div>
           <div id="quick-msg" style="font-size:13px;margin-top:6px"></div>
@@ -605,7 +684,7 @@ details[open] summary::after{transform:rotate(-135deg)}
       <input type="date" id="planned-start-date" style="margin-bottom:8px">
       <textarea id="planned-input" rows="6" placeholder="Portable: -50000&#10;Chambre: -15000 x10j&#10;Vente: +49000 x10j"></textarea>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-        <span id="planned-preview" style="font-size:12px;color:#6b6b70"></span>
+        <span id="planned-preview" style="font-size:12px;color:var(--text-3)"></span>
         <button class="btn btn-primary btn-sm" onclick="addPlanned()">Ajouter</button>
       </div>
       <div id="planned-msg" style="font-size:13px;margin-top:6px"></div>
@@ -710,13 +789,26 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 
   <div class="pro-section" id="pro-export">
+    <!-- Revision des entrees anterieures au correctif du signe (12/08/2026).
+         Cette carte reste invisible tant que findSuspects() ne trouve rien,
+         et disparait definitivement une fois la revision close. -->
+    <div class="card" id="repair-card" style="display:none">
+      <div class="section-title">🔎 Entrées à vérifier</div>
+      <div id="repair-intro" style="font-size:13px;line-height:1.55;margin-bottom:12px"></div>
+      <div id="repair-list" class="entry-list" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-danger btn-sm" onclick="repairAll()" style="flex:1;min-width:150px">Tout passer en dépense</button>
+        <button class="btn btn-sm" onclick="repairDismiss()" style="flex:1;min-width:120px">Tout est correct</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="section-title">🩺 Diagnostic de sauvegarde</div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
         <button class="btn btn-sm" onclick="runDiagnostic()" style="flex:1">Tester</button>
         <button class="btn btn-sm" onclick="forceSaveAll()" style="flex:1">Forcer sauvegarde</button>
       </div>
-      <div id="diag-result" style="font-size:12px;line-height:1.7;padding:10px;background:#f5f5f7;border-radius:8px">Appuie sur « Tester ».</div>
+      <div id="diag-result" style="font-size:12px;line-height:1.7;padding:10px;background:var(--surface-3);border-radius:8px">Appuie sur « Tester ».</div>
     </div>
 
     <div class="card">
@@ -748,11 +840,11 @@ details[open] summary::after{transform:rotate(-135deg)}
         <select id="h-year" onchange="renderHist()" style="flex:1;min-width:100px"><option value="">Toutes années</option></select>
       </div>
       <div class="entry-list" id="hist-list" style="max-height:500px"></div>
-      <div style="font-size:12px;color:#6b6b70;margin-top:8px;text-align:right" id="hist-count"></div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:8px;text-align:right" id="hist-count"></div>
     </div>
 
     <div class="card">
-      <div class="section-title" style="color:#D85A30">Supprimer des données</div>
+      <div class="section-title" style="color:var(--dep)">Supprimer des données</div>
       <label>Une journée</label>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <input type="date" id="del-day" style="flex:1">
@@ -770,7 +862,7 @@ details[open] summary::after{transform:rotate(-135deg)}
         <button class="btn btn-danger btn-sm" onclick="deleteByCat()">Suppr.</button>
       </div>
       <button class="btn btn-danger btn-sm" onclick="deleteFiltered()" style="width:100%;margin-bottom:16px">Supprimer les <span id="del-filtered-count">0</span> entrée(s) filtrée(s)</button>
-      <div style="border-top:1px solid #e5e5ea;padding-top:12px">
+      <div style="border-top:1px solid var(--line);padding-top:12px">
         <button class="btn btn-danger btn-sm" onclick="clearPlannedOnly()" style="width:100%;margin-bottom:6px">Effacer les prévisions</button>
         <button class="btn btn-danger btn-sm" onclick="clearBudgetsOnly()" style="width:100%;margin-bottom:6px">Réinitialiser les budgets</button>
         <button class="btn btn-danger btn-sm" onclick="clearEntriesOnly()" style="width:100%;margin-bottom:6px">Effacer les entrées</button>
@@ -806,7 +898,11 @@ var CATS = {
   depense: ['Achat','Alimentation','Transport','Logement','Santé','Communication','Loisirs','Fournitures','Matières premières','Prêts/Emprunts','Impôts','Autre']
 };
 var MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+/* Valeurs de repli : readTheme() les remplace par les jetons de la feuille
+   de style des que le DOM existe, et de nouveau a chaque bascule clair/sombre. */
 var GAIN_COL = '#1D9E75', DEP_COL = '#D85A30', NEUTRAL = '#888';
+var THEME = { warn:'#B8741A', text3:'#6b6b70', surface:'#fff', chart1:'#4A6FA5',
+              chart1Fill:'rgba(74,111,165,.13)', chart2:'#8E6CB8', chart2Fill:'rgba(142,108,184,.13)' };
 var MAX_SANE_AMOUNT = 5000000;
 
 var CAT_COLORS = {
@@ -815,6 +911,34 @@ var CAT_COLORS = {
   'Matières premières':'#5C8A3A','Prêts/Emprunts':'#B85C38','Impôts':'#8A6D5C','Autre':'#999',
   'Salaire':'#1D9E75','Vente':'#26C293','Remboursement':'#5FB98E','Bonus':'#3BA378','Investissement':'#2E8B6A'
 };
+/* ---------- couleurs pilotees par la feuille de style ----------
+   Un seul endroit lit les jetons CSS ; le reste du script ne connait que
+   THEME, GAIN_COL, DEP_COL et NEUTRAL. Chart.js n'ayant aucune notion de
+   variables CSS, on lui pousse les valeurs resolues. */
+function cssVar(n, repli){
+  try {
+    var v = getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    return v || repli;
+  } catch(e){ return repli; }
+}
+function readTheme(){
+  THEME = {
+    warn:       cssVar('--warn', THEME.warn),
+    text3:      cssVar('--text-3', THEME.text3),
+    surface:    cssVar('--surface', THEME.surface),
+    chart1:     cssVar('--chart-1', THEME.chart1),
+    chart1Fill: cssVar('--chart-1-fill', THEME.chart1Fill),
+    chart2:     cssVar('--chart-2', THEME.chart2),
+    chart2Fill: cssVar('--chart-2-fill', THEME.chart2Fill)
+  };
+  GAIN_COL = cssVar('--gain-strong', GAIN_COL);
+  DEP_COL  = cssVar('--dep-strong', DEP_COL);
+  NEUTRAL  = THEME.text3;
+  if(window.Chart){
+    Chart.defaults.color = THEME.text3;
+    Chart.defaults.borderColor = cssVar('--line-soft', '#eee');
+  }
+}
 var CAT_ICONS = {
   'Achat':'🧾','Alimentation':'🍽️','Transport':'🚗','Logement':'🏠','Santé':'⚕️',
   'Communication':'📱','Loisirs':'🎮','Fournitures':'📦','Matières premières':'🌾',
@@ -857,6 +981,9 @@ var idCounter = 0;
 var currentProTab = 'saisie';
 var shortcutEditMode = false;
 var storageOK = null;
+var repairDone = false;   /* revision des entrees d'avant le 12/08 : close par l'utilisateur */
+var lastBackup = null;    /* date du dernier export JSON */
+var snoozeUntil = null;   /* rappel de sauvegarde repousse jusqu'a cette date */
 
 /* ---------- utils ---------- */
 function esc(s){
@@ -962,6 +1089,15 @@ function load(){
     return storageGet('budget_planned');
   }).then(function(r){
     if(r && r.value){ try { planned = JSON.parse(r.value) || []; } catch(e){} }
+    return storageGet('budget_repair_done');
+  }).then(function(r){
+    if(r && r.value === '1') repairDone = true;
+    return storageGet('budget_last_backup');
+  }).then(function(r){
+    if(r && r.value) lastBackup = r.value;
+    return storageGet('budget_backup_snooze');
+  }).then(function(r){
+    if(r && r.value) snoozeUntil = r.value;
     setStorageStatus(true);
   });
 }
@@ -971,13 +1107,117 @@ function saveMode(){ return storageSet('budget_mode', mode); }
 function saveShortcuts(){ return storageSet('budget_shortcuts', JSON.stringify(shortcuts)); }
 function savePlanned(){ return storageSet('budget_planned', JSON.stringify(planned)); }
 
+/* ---------- revision des entrees d'avant le correctif du signe ----------
+   Jusqu'au 12/08/2026, un « - » avale par le separateur de la regex faisait
+   enregistrer en GAIN toute saisie « Mot -montant » dont le mot figurait aussi
+   dans la liste des gains. Les achats de matieres premieres sont les premiers
+   concernes : « Passion -150000 » se retrouve en gain, categorie Vente.
+
+   Le signe d'origine n'est pas conserve (parseQuickLine nettoie desc), donc
+   rien ne distingue formellement une vraie vente d'un achat mal signe. Aucune
+   conversion automatique n'est donc faite : on ne fait que presenter les
+   candidats et laisser trancher. */
+var REPAIR_CUTOFF = '2026-08-12';
+
+/* Mots presents a la fois dans la liste gain et dans la liste depense : eux
+   seuls pouvaient basculer du mauvais cote. */
+function ambiguousWords(){
+  var gain = {}, out = [];
+  AUTO_CAT.gain.forEach(function(pair){
+    pair[1].forEach(function(w){ gain[w] = 1; });
+  });
+  AUTO_CAT.depense.forEach(function(pair){
+    pair[1].forEach(function(w){ if(gain[w] && out.indexOf(w) === -1) out.push(w); });
+  });
+  return out;
+}
+/* La liste est courte et figee : on la calcule une fois. */
+var AMBIGUOUS_CACHE = null;
+function isAmbiguous(desc){
+  if(!AMBIGUOUS_CACHE) AMBIGUOUS_CACHE = ambiguousWords();
+  var d = String(desc || '').toLowerCase();
+  for(var i = 0; i < AMBIGUOUS_CACHE.length; i++){
+    if(d.indexOf(AMBIGUOUS_CACHE[i]) !== -1) return true;
+  }
+  return false;
+}
+function findSuspects(){
+  if(repairDone) return [];
+  var mots = ambiguousWords();
+  return entries.filter(function(e){
+    if(e.type !== 'gain') return false;
+    if(!e.date || e.date >= REPAIR_CUTOFF) return false;
+    var d = String(e.desc || '').toLowerCase();
+    for(var i = 0; i < mots.length; i++){ if(d.indexOf(mots[i]) !== -1) return true; }
+    return false;
+  });
+}
+function renderRepair(){
+  var card = document.getElementById('repair-card');
+  if(!card) return;
+  var sus = findSuspects();
+  if(!sus.length){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  var total = sus.reduce(function(s, e){ return s + e.amount; }, 0);
+  document.getElementById('repair-intro').innerHTML =
+    '<b>' + sus.length + ' entrée(s)</b> enregistrée(s) en gain avant le ' + fmtDateFR(REPAIR_CUTOFF) +
+    ', pour <b>' + fmt(total) + '</b>. À cette date, un bug de saisie inversait le signe des achats ' +
+    'de matières premières.<br><span style="color:var(--text-3)">Garde celles qui sont de vraies ventes, ' +
+    'convertis les autres. Tout convertir retirerait <b>' + fmt(2 * total) + '</b> du solde global ' +
+    '(un gain qui devient une dépense compte deux fois).</span>';
+
+  document.getElementById('repair-list').innerHTML = sus.map(function(e){
+    return '<div class="entry-item">' +
+      '<div class="entry-meta">' +
+        '<span style="font-size:13px">' + (CAT_ICONS[e.cat] || '') + ' ' + esc(e.cat) +
+          (e.desc ? ' · ' + esc(e.desc) : '') + '</span>' +
+        '<div class="entry-cat">' + fmtDateFR(e.date) + ' → deviendrait « ' +
+          esc(autoCat(String(e.desc || ''), 'depense')) + ' »</div>' +
+      '</div>' +
+      '<span class="entry-amount gain-color">+' + fmtShort(e.amount) + '</span>' +
+      '<button class="btn btn-danger btn-sm" onclick="repairOne(' + e.id + ')" title="Convertir en dépense">→</button>' +
+    '</div>';
+  }).join('');
+}
+function convertToDepense(e){
+  e.type = 'depense';
+  e.cat = autoCat(String(e.desc || ''), 'depense');
+}
+function repairOne(id){
+  var e = entries.filter(function(x){ return x.id === id; })[0];
+  if(!e) return;
+  convertToDepense(e);
+  save().then(function(){ renderAll(); renderRepair(); });
+}
+function repairAll(){
+  var sus = findSuspects();
+  if(!sus.length) return;
+  uiConfirm('Convertir les ' + sus.length + ' entrée(s) en dépenses ?' +
+    '<br><span style="font-size:12px;color:var(--text-3)">Réversible une par une via l\'historique.</span>',
+    'Convertir').then(function(ok){
+      if(!ok) return;
+      sus.forEach(convertToDepense);
+      save().then(function(){ renderAll(); renderRepair(); });
+    });
+}
+function repairDismiss(){
+  uiConfirm('Masquer définitivement cette vérification ?' +
+    '<br><span style="font-size:12px;color:var(--text-3)">Les entrées restent telles quelles.</span>',
+    'Masquer').then(function(ok){
+      if(!ok) return;
+      repairDone = true;
+      storageSet('budget_repair_done', '1').then(function(){ renderRepair(); });
+    });
+}
+
 function runDiagnostic(){
   var out = document.getElementById('diag-result');
   out.innerHTML = 'Test en cours…';
   var lines = [];
   lines.push('Stockage : ' + (STORE ? '✅ ' + STORE_NAME : '❌ AUCUN'));
   if(!STORE){
-    out.innerHTML = lines.join('<br>') + '<br><br><b style="color:#D85A30">Sauvegarde impossible ici. Utilise Export JSON.</b>';
+    out.innerHTML = lines.join('<br>') + '<br><br><b style="color:var(--dep)">Sauvegarde impossible ici. Utilise Export JSON.</b>';
     return;
   }
   var stamp = 'diag-' + Date.now();
@@ -994,11 +1234,11 @@ function runDiagnostic(){
     lines.push('---');
     lines.push('En mémoire : ' + entries.length + ' entrée(s)');
     lines.push('En sauvegarde : ' + stored + ' entrée(s)');
-    if(entries.length && stored === 0) lines.push('<b style="color:#D85A30">⚠️ Non persisté.</b>');
-    else if(stored === entries.length) lines.push('<b style="color:#1D9E75">✅ Synchronisé.</b>');
+    if(entries.length && stored === 0) lines.push('<b style="color:var(--dep)">⚠️ Non persisté.</b>');
+    else if(stored === entries.length) lines.push('<b style="color:var(--gain)">✅ Synchronisé.</b>');
     out.innerHTML = lines.join('<br>');
   }).catch(function(e){
-    lines.push('<b style="color:#D85A30">❌ ' + esc(e && e.message ? e.message : 'erreur') + '</b>');
+    lines.push('<b style="color:var(--dep)">❌ ' + esc(e && e.message ? e.message : 'erreur') + '</b>');
     out.innerHTML = lines.join('<br>');
   });
 }
@@ -1007,8 +1247,8 @@ function forceSaveAll(){
   Promise.all([save(), saveBudgets(), savePlanned(), saveShortcuts()]).then(function(r){
     var ok = r.every(Boolean);
     out.innerHTML = ok
-      ? '<b style="color:#1D9E75">✅ Sauvegarde forcée réussie.</b>'
-      : '<b style="color:#D85A30">❌ Échec. Exporte en JSON.</b>';
+      ? '<b style="color:var(--gain)">✅ Sauvegarde forcée réussie.</b>'
+      : '<b style="color:var(--dep)">❌ Échec. Exporte en JSON.</b>';
   });
 }
 
@@ -1244,7 +1484,7 @@ function renderCatBars(id, bd, color){
     return '<div class="cat-row">' +
       '<div class="cat-name">' + (CAT_ICONS[cat] || '') + ' ' + esc(cat) + '</div>' +
       '<div class="cat-bar"><div class="cat-bar-fill" style="width:' + (amt/max*100).toFixed(1) + '%;background:' + (CAT_COLORS[cat] || color) + '"></div></div>' +
-      '<div class="cat-amount">' + fmtShort(amt) + '<div style="font-size:10px;color:#6b6b70;font-weight:400">' + ((amt/total)*100).toFixed(0) + '%</div></div>' +
+      '<div class="cat-amount">' + fmtShort(amt) + '<div style="font-size:10px;color:var(--text-3);font-weight:400">' + ((amt/total)*100).toFixed(0) + '%</div></div>' +
     '</div>';
   }).join('');
 }
@@ -1257,7 +1497,7 @@ function renderDonut(cid, key, bd){
     type: 'doughnut',
     data: {
       labels: bd.map(function(b){ return (CAT_ICONS[b[0]] || '') + ' ' + b[0]; }),
-      datasets: [{ data: bd.map(function(b){ return b[1]; }), backgroundColor: bd.map(function(b){ return CAT_COLORS[b[0]] || '#999'; }), borderWidth: 2, borderColor: '#fff' }]
+      datasets: [{ data: bd.map(function(b){ return b[1]; }), backgroundColor: bd.map(function(b){ return CAT_COLORS[b[0]] || '#999'; }), borderWidth: 2, borderColor: THEME.surface }]
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '62%',
@@ -1404,7 +1644,7 @@ function saveHero(inpId, msgId, prevId){
     entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
     return save().then(function(){
       var al = checkBudgetAlert({ type: p.type, cat: p.cat, date: date });
-      msg.style.color = al ? '#B8741A' : GAIN_COL;
+      msg.style.color = al ? THEME.warn : GAIN_COL;
       msg.textContent = '✓ ' + p.desc + ' — ' + p.cat + ' : ' + (p.type === 'gain' ? '+' : '-') + fmt(p.amount) + dateSuffix(date) + al;
       inp.value = '';
       document.getElementById(prevId).textContent = '';
@@ -1591,7 +1831,7 @@ function renderPlannedChart(){
   });
   charts.planned = new Chart(c, {
     type: 'line',
-    data: { labels: labels, datasets: [{ data: data, borderColor: '#8E6CB8', backgroundColor: 'rgba(142,108,184,.13)', fill: true, tension: .25, pointRadius: 3, borderWidth: 2, borderDash: [6,3] }] },
+    data: { labels: labels, datasets: [{ data: data, borderColor: THEME.chart2, backgroundColor: THEME.chart2Fill, fill: true, tension: .25, pointRadius: 3, borderWidth: 2, borderDash: [6,3] }] },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(x){ return ' ' + fmt(x.raw); } } } },
       scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { callback: function(v){ return fmtShort(v); }, font: { size: 10 } } } } }
@@ -1600,7 +1840,7 @@ function renderPlannedChart(){
   var g = sumType(planned, 'gain'), d = sumType(planned, 'depense');
   if(sum){
     sum.innerHTML = 'Solde actuel : <b class="' + (start >= 0 ? 'sol-pos' : 'sol-neg') + '">' + (start >= 0 ? '+' : '') + fmt(start) + '</b><br>' +
-      (overdue.length ? '<span style="color:#B8741A">' + overdue.length + ' échue(s) intégrée(s) (net ' + (overdueNet >= 0 ? '+' : '') + fmt(overdueNet) + ')</span><br>' : '') +
+      (overdue.length ? '<span style="color:var(--warn)">' + overdue.length + ' échue(s) intégrée(s) (net ' + (overdueNet >= 0 ? '+' : '') + fmt(overdueNet) + ')</span><br>' : '') +
       'Gains prévus : <b class="gain-color">+' + fmt(g) + '</b> · Dépenses : <b class="dep-color">−' + fmt(d) + '</b><br>' +
       'Solde projeté final : <b class="' + (fin >= 0 ? 'sol-pos' : 'sol-neg') + '">' + (fin >= 0 ? '+' : '') + fmt(fin) + '</b>' +
       (minV < 0 ? '<div class="alert alert-danger" style="margin-top:10px">⚠️ Passage en négatif le ' + (minD || '—') + ' — creux à ' + fmt(minV) + '</div>' : '');
@@ -1697,7 +1937,7 @@ function renderShortcuts(){
     if(!el) return;
     var html = shortcuts.map(function(s, i){
       return shortcutEditMode
-        ? '<button class="shortcut-chip" style="border-color:#D85A30;color:#D85A30" onclick="removeShortcut(' + i + ')">' + esc(s) + ' ✕</button>'
+        ? '<button class="shortcut-chip" style="border-color:var(--dep);color:var(--dep)" onclick="removeShortcut(' + i + ')">' + esc(s) + ' ✕</button>'
         : '<button class="shortcut-chip" onclick="useShortcut(' + i + ')">' + esc(s) + '</button>';
     }).join('');
     html += '<button class="shortcut-chip shortcut-add" onclick="addShortcut()">+ Raccourci</button>';
@@ -1717,7 +1957,7 @@ function useShortcut(i){
     return save().then(function(){
       var msg = document.getElementById(mode === 'lite' ? 'hero-msg' : 'hero-msg-pro');
       var al = checkBudgetAlert({ type: p.type, cat: p.cat, date: date });
-      msg.style.color = al ? '#B8741A' : GAIN_COL;
+      msg.style.color = al ? THEME.warn : GAIN_COL;
       msg.textContent = '✓ ' + p.desc + ' : ' + (p.type === 'gain' ? '+' : '-') + fmt(p.amount) + al;
       renderAll();
       setTimeout(function(){ msg.textContent = ''; }, al ? 6000 : 3000);
@@ -1725,7 +1965,7 @@ function useShortcut(i){
   });
 }
 function addShortcut(){
-  uiPrompt('Nouveau raccourci<br><span style="font-size:12px;color:#6b6b70">Exemple : Bière -650</span>', '').then(function(s){
+  uiPrompt('Nouveau raccourci<br><span style="font-size:12px;color:var(--text-3)">Exemple : Bière -650</span>', '').then(function(s){
     if(!s) return;
     if(!parseQuickLine(s)){ uiAlert('Format invalide. Exemple : Bière -650'); return; }
     shortcuts.push(s.trim());
@@ -1752,6 +1992,16 @@ function renderLite(){
   sEl.className = 'lite-solde ' + (sol >= 0 ? 'sol-pos' : 'sol-neg');
   document.getElementById('lite-gain').textContent = ' ' + fmt(g);
   document.getElementById('lite-dep').textContent = ' ' + fmt(d);
+  /* Cumul du mois : l'horizon d'un budget, absent entre le solde du jour et
+     le cumul depuis toujours. */
+  var mArr = getEntries({ month: t.slice(0,7) });
+  var ms = sumType(mArr, 'gain') - sumType(mArr, 'depense');
+  var mEl = document.getElementById('lite-month');
+  mEl.textContent = (ms >= 0 ? '+' : '') + fmt(ms);
+  mEl.style.color = ms >= 0 ? GAIN_COL : DEP_COL;
+  document.getElementById('lite-month-label').firstChild.textContent =
+    MONTHS[new Date(t + 'T12:00').getMonth()];
+
   var gs = sumType(entries, 'gain') - sumType(entries, 'depense');
   var gEl = document.getElementById('lite-global');
   gEl.textContent = (gs >= 0 ? '+' : '') + fmt(gs);
@@ -1814,8 +2064,8 @@ function renderDay(){
     el.innerHTML = '<div class="empty">Aucune donnée</div>';
   } else {
     var html = '';
-    if(gains.length) html += '<div style="font-size:12px;color:#6b6b70;margin-bottom:4px">Gains</div><div id="tmp-gain"></div>';
-    if(deps.length) html += '<div style="font-size:12px;color:#6b6b70;margin:10px 0 4px">Dépenses</div><div id="tmp-dep"></div>';
+    if(gains.length) html += '<div style="font-size:12px;color:var(--text-3);margin-bottom:4px">Gains</div><div id="tmp-gain"></div>';
+    if(deps.length) html += '<div style="font-size:12px;color:var(--text-3);margin:10px 0 4px">Dépenses</div><div id="tmp-dep"></div>';
     el.innerHTML = html;
     if(gains.length) renderCatBars('tmp-gain', gains, GAIN_COL);
     if(deps.length) renderCatBars('tmp-dep', deps, DEP_COL);
@@ -1895,7 +2145,7 @@ function renderBalanceChart(arr, y, mo){
   if(charts.balance){ charts.balance.destroy(); }
   charts.balance = new Chart(document.getElementById('balance-chart'), {
     type: 'line',
-    data: { labels: labels, datasets: [{ data: bal, borderColor: '#4A6FA5', backgroundColor: 'rgba(74,111,165,.13)', fill: true, tension: .3, pointRadius: 0, borderWidth: 2 }] },
+    data: { labels: labels, datasets: [{ data: bal, borderColor: THEME.chart1, backgroundColor: THEME.chart1Fill, fill: true, tension: .3, pointRadius: 0, borderWidth: 2 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
       scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { callback: function(v){ return fmtShort(v); }, font: { size: 10 } } } } }
   });
@@ -1934,7 +2184,7 @@ function renderYear(){
     if(charts.yearBal){ charts.yearBal.destroy(); }
     charts.yearBal = new Chart(document.getElementById('year-balance-chart'), {
       type: 'line',
-      data: { labels: MONTHS.map(function(x){ return x.slice(0,3); }), datasets: [{ data: mB, borderColor: '#4A6FA5', backgroundColor: 'rgba(74,111,165,.13)', fill: true, tension: .3, pointRadius: 3, borderWidth: 2 }] },
+      data: { labels: MONTHS.map(function(x){ return x.slice(0,3); }), datasets: [{ data: mB, borderColor: THEME.chart1, backgroundColor: THEME.chart1Fill, fill: true, tension: .3, pointRadius: 3, borderWidth: 2 }] },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
         scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { callback: function(v){ return fmtShort(v); }, font: { size: 10 } } } } }
     });
@@ -1957,7 +2207,7 @@ function renderYear(){
       fc.push('<b>' + MONTHS[mm] + ' ' + yr + '</b> : ~' + fmtShort(aG) + ' | ~' + fmtShort(aD) +
         ' | <span class="' + ((aG - aD) >= 0 ? 'sol-pos' : 'sol-neg') + '">' + ((aG - aD) >= 0 ? '+' : '') + fmtShort(aG - aD) + '</span>');
     }
-    document.getElementById('forecast').innerHTML = '<div style="font-size:12px;color:#6b6b70;margin-bottom:8px">Moyenne des ' + rec.length + ' derniers mois avec données' + (isCur ? '' : ' — projection théorique à partir de ' + y) + '</div>' + fc.join('<br>');
+    document.getElementById('forecast').innerHTML = '<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">Moyenne des ' + rec.length + ' derniers mois avec données' + (isCur ? '' : ' — projection théorique à partir de ' + y) + '</div>' + fc.join('<br>');
   } else {
     document.getElementById('forecast').innerHTML = '<div class="empty">Pas assez de données</div>';
   }
@@ -1988,7 +2238,7 @@ function renderBudgets(){
   document.getElementById('budget-list').innerHTML = CATS.depense.map(function(c){
     var b = budgets[c] || 0, s = spent[c] || 0;
     var p = b > 0 ? Math.min((s / b) * 100, 100) : 0;
-    var col = b === 0 ? NEUTRAL : (s > b ? DEP_COL : (s / b > .8 ? '#E5A341' : GAIN_COL));
+    var col = b === 0 ? NEUTRAL : (s > b ? DEP_COL : (s / b > .8 ? THEME.warn : GAIN_COL));
     return '<div class="budget-row">' +
       '<div class="budget-header"><span><b>' + (CAT_ICONS[c] || '') + ' ' + c + '</b></span>' +
       '<span style="font-size:12px">' + fmtShort(s) + ' / ' + (b > 0 ? fmtShort(b) : '—') + '</span></div>' +
@@ -2034,6 +2284,43 @@ function exportJSON(){
   var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned, exported_at: new Date().toISOString() };
   var b = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
   downloadBlob(b, 'finances_backup_' + today() + '.json');
+  lastBackup = today();
+  storageSet('budget_last_backup', lastBackup).then(renderBackupReminder);
+}
+
+/* ---------- rappel de sauvegarde ----------
+   Les donnees sont en localStorage, separees entre le telephone et le PC :
+   un vidage du cache Chrome les emporte. L'export JSON est le seul filet,
+   donc on le rappelle au bout de BACKUP_DAYS jours — et jamais autrement. */
+var BACKUP_DAYS = 30;
+function daysBetween(a, b){
+  return Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 86400000);
+}
+function renderBackupReminder(){
+  var el = document.getElementById('backup-reminder');
+  if(!el) return;
+  var t = today();
+  /* Rien a proteger, ou rappel repousse : on se tait. */
+  if(!entries.length || (snoozeUntil && snoozeUntil > t)){ el.style.display = 'none'; return; }
+
+  /* Sans sauvegarde connue, on date l'anciennete depuis la premiere entree :
+     une app installee hier n'a pas a reclamer un export. */
+  var depuis = lastBackup;
+  if(!depuis){
+    depuis = entries.reduce(function(m, e){ return (!m || e.date < m) ? e.date : m; }, null);
+  }
+  if(!depuis){ el.style.display = 'none'; return; }
+  var age = daysBetween(depuis, t);
+  if(age < BACKUP_DAYS){ el.style.display = 'none'; return; }
+
+  el.style.display = 'flex';
+  document.getElementById('backup-reminder-text').innerHTML = lastBackup
+    ? '💾 Sauvegarde vieille de <b>' + age + ' jours</b>'
+    : '💾 <b>Jamais sauvegardé</b> · ' + entries.length + ' entrées';
+}
+function snoozeBackup(){
+  snoozeUntil = addDays(today(), BACKUP_DAYS);
+  storageSet('budget_backup_snooze', snoozeUntil).then(renderBackupReminder);
 }
 function isValidEntry(e){
   return e && typeof e === 'object'
@@ -2199,7 +2486,7 @@ function clearBudgetsOnly(){
 }
 function clearEntriesOnly(){
   if(!entries.length){ delMsg('Aucune entrée.', false); return; }
-  uiConfirm('Effacer les ' + entries.length + ' entrée(s) ?\n<span style="font-size:12px;color:#6b6b70">Budgets et prévisions conservés.</span>', 'Effacer').then(function(ok){
+  uiConfirm('Effacer les ' + entries.length + ' entrée(s) ?\n<span style="font-size:12px;color:var(--text-3)">Budgets et prévisions conservés.</span>', 'Effacer').then(function(ok){
     if(!ok) return;
     entries = [];
     return save().then(function(){ renderAll(); delMsg('Entrées effacées.', true); });
@@ -2249,7 +2536,7 @@ function renderCurrentProTab(){
   else if(id === 'mois') renderMonth();
   else if(id === 'annee') renderYear();
   else if(id === 'budgets') renderBudgets();
-  else if(id === 'export') renderHist();
+  else if(id === 'export'){ renderRepair(); renderHist(); }
 }
 function populateSelects(){
   var now = new Date(), cy = now.getFullYear();
@@ -2289,6 +2576,12 @@ function populateSelects(){
   }
 }
 function renderAll(){
+  /* Relire les jetons ici plutot que de dependre du seul evenement
+     matchMedia « change » : celui-ci ne se declenche pas partout, et un
+     rendu avec les couleurs de l'autre theme est bien plus visible qu'un
+     getComputedStyle de plus. */
+  readTheme();
+  renderBackupReminder();
   populateSelects();
   renderShortcuts();
   if(mode === 'lite') renderLite();
@@ -2304,10 +2597,22 @@ function setupHero(iId, mId, pId){
     var base = (mode === 'lite') ? today() : ((document.getElementById('f-date') || {}).value || today());
     var p = parseEntryLine(this.value, base);
     var el = document.getElementById(pId);
-    el.textContent = p
-      ? '→ ' + p.cat + ' ' + (p.type === 'gain' ? '(gain)' : '(dépense)') + ' · ' + fmt(p.amount) + dateSuffix(p.date)
-      : '';
-    el.style.color = (p && p.date !== today()) ? '#B8741A' : '#6b6b70';
+    if(!p){ el.textContent = ''; return; }
+
+    /* Le sens (gain ou depense) est ce qui se trompe le plus silencieusement :
+       on l'affiche en couleur, et on previent quand le mot appartient aux deux
+       listes — c'est exactement ce qui avait fausse les entrees d'avant le 12/08. */
+    var sens = p.type === 'gain' ? 'gain' : 'dépense';
+    var couleur = p.type === 'gain' ? 'gain-color' : 'dep-color';
+    var html = '→ ' + esc(p.cat) + ' · <span class="' + couleur + '">' +
+               (p.type === 'gain' ? '+' : '−') + fmt(p.amount) + ' (' + sens + ')</span>' +
+               esc(dateSuffix(p.date));
+    if(isAmbiguous(p.desc)){
+      html += '<br><span style="color:var(--warn)">⚠︎ mot ambigu : précise le signe (' +
+              (p.type === 'gain' ? '−' : '+') + ') si c\'est l\'inverse</span>';
+    }
+    el.innerHTML = html;
+    el.style.color = (p.date !== today()) ? THEME.warn : THEME.text3;
   });
 }
 
@@ -2324,8 +2629,8 @@ document.getElementById('quick-input').addEventListener('input', function(){
   var det = document.getElementById('quick-detail');
   det.innerHTML = diag.map(function(x){
     return x.ok
-      ? '<div style="font-size:12px;padding:4px 8px;border-left:3px solid ' + (CAT_COLORS[x.p.cat] || '#999') + ';background:#f5f5f7;border-radius:4px;margin-bottom:3px">' + (CAT_ICONS[x.p.cat] || '') + ' <b>' + esc(x.p.desc) + '</b> → ' + x.p.cat + ' · <span class="' + (x.p.type === 'gain' ? 'gain-color' : 'dep-color') + '">' + (x.p.type === 'gain' ? '+' : '-') + fmt(x.p.amount) + '</span>' + (x.p.date !== today() ? '<span style="color:#B8741A"> · le ' + fmtDateFR(x.p.date) + '</span>' : '') + '</div>'
-      : '<div style="font-size:12px;padding:4px 8px;border-left:3px solid ' + DEP_COL + ';background:#FAECE7;border-radius:4px;margin-bottom:3px">⚠️ <b>' + esc(x.line) + '</b> → ' + x.hint + '</div>';
+      ? '<div style="font-size:12px;padding:4px 8px;border-left:3px solid ' + (CAT_COLORS[x.p.cat] || '#999') + ';background:var(--surface-3);border-radius:4px;margin-bottom:3px">' + (CAT_ICONS[x.p.cat] || '') + ' <b>' + esc(x.p.desc) + '</b> → ' + x.p.cat + ' · <span class="' + (x.p.type === 'gain' ? 'gain-color' : 'dep-color') + '">' + (x.p.type === 'gain' ? '+' : '-') + fmt(x.p.amount) + '</span>' + (x.p.date !== today() ? '<span style="color:var(--warn)"> · le ' + fmtDateFR(x.p.date) + '</span>' : '') + '</div>'
+      : '<div style="font-size:12px;padding:4px 8px;border-left:3px solid ' + DEP_COL + ';background:var(--dep-soft);border-radius:4px;margin-bottom:3px">⚠️ <b>' + esc(x.line) + '</b> → ' + x.hint + '</div>';
   }).join('');
 });
 
@@ -2352,12 +2657,26 @@ function initUI(){
   setMode(mode);
 }
 
+/* Bascule clair/sombre du systeme : on relit les jetons et on redessine.
+   Les graphiques Chart.js ne se rafraichissent pas seuls, d'ou renderAll(). */
+function watchColorScheme(){
+  if(!window.matchMedia) return;
+  var mq = window.matchMedia('(prefers-color-scheme: dark)');
+  var onChange = function(){ renderAll(); };   /* renderAll relit deja les jetons */
+  if(mq.addEventListener) mq.addEventListener('change', onChange);
+  else if(mq.addListener) mq.addListener(onChange);
+}
+
 load().then(function(){
   syncIdCounter();
+  readTheme();
   initUI();
+  watchColorScheme();
 }).catch(function(e){
   setStorageStatus(false, e && e.message ? e.message : 'erreur au chargement');
+  readTheme();
   initUI();
+  watchColorScheme();
 });
 
 /* ---------- application installable ---------- */
