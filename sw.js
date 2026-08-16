@@ -1,7 +1,7 @@
 /* Service worker — rend l'application utilisable sans connexion.
    Stratégie « cache d'abord » : tout est statique, aucun appel réseau au fonctionnement.
    Pour publier une mise à jour, incrémente CACHE ci-dessous (finances-v2, v3...). */
-var CACHE = 'finances-v4';
+var CACHE = 'finances-v5';
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function(e){

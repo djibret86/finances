@@ -895,7 +895,7 @@ details[open] summary::after{transform:rotate(-135deg)}
 
 var CATS = {
   gain: ['Salaire','Vente','Remboursement','Bonus','Investissement','Autre'],
-  depense: ['Achat','Alimentation','Transport','Logement','Santé','Communication','Loisirs','Fournitures','Matières premières','Prêts/Emprunts','Impôts','Autre']
+  depense: ['Achat','Alimentation','Transport','Logement','Santé','Éducation','Famille & fêtes','Soins & services','Communication','Loisirs','Fournitures','Matières premières','Prêts/Emprunts','Impôts','Extra','Autre']
 };
 var MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 /* Valeurs de repli : readTheme() les remplace par les jetons de la feuille
@@ -909,6 +909,7 @@ var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Transport':'#4A6FA5','Logement':'#8E6CB8',
   'Santé':'#D14D72','Communication':'#3BA3A3','Loisirs':'#E5A341','Fournitures':'#7A9E5F',
   'Matières premières':'#5C8A3A','Prêts/Emprunts':'#B85C38','Impôts':'#8A6D5C','Autre':'#999',
+  'Éducation':'#3E7CB1','Famille & fêtes':'#B5568F','Soins & services':'#6D8299','Extra':'#9C3D54',
   'Salaire':'#1D9E75','Vente':'#26C293','Remboursement':'#5FB98E','Bonus':'#3BA378','Investissement':'#2E8B6A'
 };
 /* ---------- couleurs pilotees par la feuille de style ----------
@@ -942,7 +943,7 @@ function readTheme(){
 var CAT_ICONS = {
   'Achat':'🧾','Alimentation':'🍽️','Transport':'🚗','Logement':'🏠','Santé':'⚕️',
   'Communication':'📱','Loisirs':'🎮','Fournitures':'📦','Matières premières':'🌾',
-  'Prêts/Emprunts':'💳','Impôts':'🏛️','Autre':'📌',
+  'Prêts/Emprunts':'💳','Impôts':'🏛️','Autre':'📌','Éducation':'🎓','Famille & fêtes':'🎉','Soins & services':'✂️','Extra':'⚡',
   'Salaire':'💼','Vente':'🛒','Remboursement':'↩️','Bonus':'🎁','Investissement':'📈'
 };
 
@@ -956,11 +957,44 @@ var AUTO_CAT = {
   ],
   depense: [
     ['Achat',['achat','acheté','achete','approvisionnement','appro','stock','fournisseur','marchandise','revente','réassort','reassort']],
-    ['Alimentation',['bière','biere','beer','vin','whisky','rhum','alcool','resto','restaurant','repas','nourriture','manger','déjeuner','diner','dîner','brunch','café','cafe','pain','marché','marche','super','supermarché','supermarche','boutique','shop','courses','food','snack','maquis','drink','boisson','eau','jus','oeuf','œuf','oeufs','lait','riz','attiéké','attieke','poulet','poisson','viande','légume','legume','fruit','tomate','oignon','banane','plantain','sucre','sel','huile','farine','yaourt','fromage','beurre','chocolat','biscuit','gâteau','gateau','bonbon']],
-    ['Transport',['taxi','transport','carburant','essence','lavage','auto','voiture','bus','moto','parking','uber','yango','fret']],
-    ['Communication',['unité','unite','unités','recharge','internet','airtel','mtn','moov','téléphone','telephone','portable','data','forfait','crédit','credit','claude','chatgpt','openai','canva','microsoft','google','apple','icloud','dropbox']],
-    ['Santé',['médecin','medecin','pharmacie','médicament','medicament','clinique','hôpital','hopital','consultation','soin']],
-    ['Logement',['loyer','électricité','electricite','cie','sodeci','facture','maison','domicile','chambre','jardinier','jardinage','ménagère','menagere','ménage','menage','nounou','gardien','vigile','cuisinier','plombier','électricien','electricien','réparation','reparation']],
+    /* Vocabulaire local : sans lui, 85 % des libellés réellement tapés
+       tombaient dans « Autre ». */
+    ['Éducation',['école','ecole','scolarité','scolarite','scolaire','inscription','universit',
+      'lycée','lycee','collège','college','cours','formation','professeur','répétiteur','repetiteur',
+      'cantine','examen','concours','diplôme','diplome','livre','cahier']],
+    /* Soins du corps et petits services du quotidien : routiniers, à ne pas
+       confondre avec « Extra » qui est réservé à l'imprévu. */
+    ['Soins & services',['coiffeur','coiffure','coiffe','tresse','mèche','meche','barbier','salon',
+      'tailleur','couturier','couture','retouche','pressing','blanchisserie','lavomatic','repassage',
+      'manucure','pédicure','pedicure','esthétique','esthetique','massage','spa','onglerie','maquillage',
+      'cordonnier','cirage','rapido','pmu','pari','loterie','pourboire']],
+    /* Dépenses extraordinaires : l'imprévu, le coup dur, ce qui ne se répète pas.
+       Attention, le caractère extraordinaire tient au contexte et non au libellé
+       (une plomberie peut être routinière ou un sinistre). Ces mots-clés ne
+       couvrent donc que les cas explicites ; le reste s'assigne à la main. */
+    ['Extra',['extraordinaire','exceptionnel','imprévu','imprevu','urgence','urgent',
+      'amende','pénalité','penalite','contravention','pv ','sinistre','accident','panne','dépannage','depannage',
+      'remorquage','casse','cambriolage','perte','dommage','indemnité','indemnite','litige','avocat','huissier',
+      'coup dur','frais exceptionnel','hors budget','extra']],
+    ['Famille & fêtes',['cérémonie','ceremonie','baptême','bapteme','mariage','décès','deces',
+      'funéraille','funeraille','tontine','natt','zakat','sadaka','aumône','aumone','don','cadeau',
+      'fête','fete','tabaski','korité','korite','ramadan','noël','noel','famille','parent','ndogou']],
+    ['Alimentation',['bière','biere','beer','vin','whisky','rhum','alcool','resto','restaurant','repas','nourriture','manger','déjeuner','diner','dîner','brunch','café','cafe','pain','marché','marche','super','supermarché','supermarche','boutique','shop','courses','food','snack','maquis','drink','boisson','eau','jus','oeuf','œuf','oeufs','lait','riz','attiéké','attieke','poulet','poisson','viande','légume','legume','fruit','tomate','oignon','banane','plantain','sucre','sel','huile','farine','yaourt','fromage','beurre','chocolat','biscuit','gâteau','gateau','bonbon',
+      'tangana','dibiterie','gargotte','gargote','thiebou','ceebu','yassa','mafé','mafe','sandwich','chawarma','chawarma','fataya','ndambe',
+      'thiakry','bissap jus','bouye','ditakh','arachide','mil','mais','maïs','manioc','patate','gombo','niebe','niébé','poivron','piment','ail','gingembre']],
+    ['Transport',['taxi','transport','carburant','essence','gasoil','lavage','auto','voiture','bus','moto','parking','uber','yango','heetch','fret',
+      'mécanicien','mecanicien','vulcanisateur','clando','car rapide','ndiaga','dem dikk','ter ','brt','pneu','vidange','garage','péage','peage','tricycle','jakarta']],
+    ['Communication',['unité','unite','unités','recharge','internet','airtel','mtn','moov','téléphone','telephone','portable','data','forfait','crédit','credit','claude','chatgpt','openai','canva','microsoft','google','apple','icloud','dropbox',
+      'orange money','wave','wari','free','yas','expresso','sonatel','wifi','fibre','pass ','illimix','sargal',
+      'réparation téléphone','reparation telephone','écran','ecran','chargeur','câble','cable','écouteur','ecouteur','coque','batterie','sim ','puce']],
+    ['Santé',['médecin','medecin','pharmacie','médicament','medicament','clinique','hôpital','hopital','consultation','soin',
+      'ordonnance','analyse','laboratoire','labo','dentiste','optique','lunette','vaccin','tension','paludisme','infirmier','sage-femme']],
+    ['Logement',['loyer','électricité','electricite','sodeci','facture','maison','domicile','chambre','jardinier','jardinage','ménagère','menagere','ménage','menage','nounou','gardien','vigile','cuisinier','plombier','électricien','electricien',
+      /* « réparation » seul, trop générique, gagnait sur « téléphone » (10 lettres
+         contre 9) et envoyait les réparations de portable en Logement. On le
+         qualifie plutôt que de le laisser rafler tout ce qui se répare. */
+      'réparation maison','reparation maison','frigo','climatiseur','clim ','ventilateur','serrure','toiture','plomberie',
+      'woyofal','senelec','sde ','sen eau','ontea','bonbonne','gaz','charbon','bois','eau courante','caution','peinture','maçon','macon','menuisier','soudeur','quittance']],
     ['Loisirs',['cinéma','cinema','sport','loisir','jeu','sortie','voyage','hôtel','hotel','vacance','playstation','xbox','nintendo','netflix','spotify','youtube','canal','dstv','streaming','abonnement','disney']],
     ['Fournitures',['bureau','papier','fourniture','matériel','materiel']],
     ['Matières premières',['matière première','matiere premiere','fruits de la passion','passion','ananas','citron','bissap','corossol','mandarine','liqueur','saveur','mangoustan','ingrédient','ingredient','ferment','étiquette','etiquette','bouteille vide','capsule','thermocapsule']],
@@ -1253,25 +1287,43 @@ function forceSaveAll(){
 }
 
 /* ---------- parsing ---------- */
+/* Un mot-clé court se cachait dans des mots plus longs : « cie » (la compagnie
+   d'électricité) dans « mécanicien », « bonbon » dans « bonbonne de gaz ». On
+   exige donc un début de mot pour les clés courtes, et surtout on retient la
+   correspondance la PLUS LONGUE au lieu de la première catégorie rencontrée —
+   sinon l'ordre de déclaration décidait du résultat. */
+function matchesKeyword(d, kw){
+  var at = d.indexOf(kw);
+  if(at === -1) return false;
+  if(kw.length > 4) return true;
+  /* clé courte : elle doit commencer un mot */
+  while(at !== -1){
+    if(at === 0 || /[^a-z0-9àâäéèêëîïôöùûüç]/.test(d.charAt(at - 1))) return true;
+    at = d.indexOf(kw, at + 1);
+  }
+  return false;
+}
 function autoCat(desc, type){
-  var d = desc.toLowerCase();
+  var d = String(desc).toLowerCase();
   var list = AUTO_CAT[type];
+  var best = null, bestLen = 0;
   for(var i = 0; i < list.length; i++){
     var cat = list[i][0], kws = list[i][1];
     for(var j = 0; j < kws.length; j++){
-      if(d.indexOf(kws[j]) !== -1) return cat;
+      var kw = kws[j];
+      if(kw.length > bestLen && matchesKeyword(d, kw)){ best = cat; bestLen = kw.length; }
     }
   }
-  return 'Autre';
+  return best || 'Autre';
 }
 function inferType(desc, sign){
   if(sign === '+') return 'gain';
   if(sign === '-') return 'depense';
-  var d = desc.toLowerCase();
+  var d = String(desc).toLowerCase();
   var g = AUTO_CAT.gain;
   for(var i = 0; i < g.length; i++){
     for(var j = 0; j < g[i][1].length; j++){
-      if(d.indexOf(g[i][1][j]) !== -1) return 'gain';
+      if(matchesKeyword(d, g[i][1][j])) return 'gain';
     }
   }
   return 'depense';
@@ -1473,20 +1525,64 @@ function renderEntryList(id, arr){
     '</div>';
   }).join('');
 }
-function renderCatBars(id, bd, color){
+/* ---------- detail par categorie (repartition) ----------
+   Chaque ligne devient un tiroir : on y voit les entrees qui composent le
+   montant, avec crayon/croix pour recategoriser sans passer par l'historique.
+   C'est ce qui rend « Autre » exploitable au lieu d'etre un tas opaque.
+   `filter` est l'objet a completer avec { cat, type } pour retrouver les
+   entrees (ex. { month: '2026-08' } ou { date: '2026-08-14' } ou { year: 2026 }) ;
+   omis, la ligne reste un simple graphique, comme avant. */
+var CAT_DRILL = {};       // rowId -> { cat, type, filter }
+var CAT_DRILL_OPEN = null; // { containerId, cat, type } de ce qui est ouvert, pour rouvrir apres un rendu
+function renderCatBars(id, bd, color, filter, type){
   var el = document.getElementById(id);
   if(!el) return;
   if(!bd.length){ el.innerHTML = '<div class="empty">Aucune donnée</div>'; return; }
   var total = bd.reduce(function(s, b){ return s + b[1]; }, 0);
   var max = bd[0][1];
-  el.innerHTML = bd.map(function(b){
+  var reopenRowId = null;
+  el.innerHTML = bd.map(function(b, i){
     var cat = b[0], amt = b[1];
-    return '<div class="cat-row">' +
+    var rowId = id + '-drill-' + i;
+    var openAttr = '', drillDiv = '';
+    if(filter){
+      CAT_DRILL[rowId] = { cat: cat, type: type, filter: filter };
+      openAttr = ' onclick="toggleCatDrill(\'' + rowId + '\')" style="cursor:pointer"';
+      drillDiv = '<div class="entry-list" id="' + rowId + '" style="display:none;margin-bottom:8px"></div>';
+      if(CAT_DRILL_OPEN && CAT_DRILL_OPEN.containerId === id && CAT_DRILL_OPEN.cat === cat && CAT_DRILL_OPEN.type === type){
+        reopenRowId = rowId;
+      }
+    }
+    return '<div class="cat-row"' + openAttr + '>' +
       '<div class="cat-name">' + (CAT_ICONS[cat] || '') + ' ' + esc(cat) + '</div>' +
       '<div class="cat-bar"><div class="cat-bar-fill" style="width:' + (amt/max*100).toFixed(1) + '%;background:' + (CAT_COLORS[cat] || color) + '"></div></div>' +
-      '<div class="cat-amount">' + fmtShort(amt) + '<div style="font-size:10px;color:var(--text-3);font-weight:400">' + ((amt/total)*100).toFixed(0) + '%</div></div>' +
-    '</div>';
+      '<div class="cat-amount">' + fmtShort(amt) + '<div style="font-size:10.5px;color:var(--text-3);font-weight:600">' + ((amt/total)*100).toFixed(0) + '%</div></div>' +
+    '</div>' + drillDiv;
   }).join('');
+  if(reopenRowId) openCatDrill(reopenRowId);
+}
+function openCatDrill(rowId){
+  var box = document.getElementById(rowId);
+  var info = CAT_DRILL[rowId];
+  if(!box || !info) return;
+  var f = {}; for(var k in info.filter) f[k] = info.filter[k];
+  f.cat = info.cat; f.type = info.type;
+  renderEntryList(rowId, getEntries(f));
+  box.style.display = 'flex';
+  CAT_DRILL_OPEN = { containerId: rowId.split('-drill-')[0], cat: info.cat, type: info.type };
+}
+function toggleCatDrill(rowId){
+  var box = document.getElementById(rowId);
+  if(!box) return;
+  var willOpen = box.style.display === 'none';
+  /* Un seul tiroir ouvert a la fois dans la meme liste, pour que la carte
+     ne s'etire pas indefiniment quand on compare plusieurs categories. */
+  var parent = box.parentElement;
+  if(parent){
+    Array.prototype.forEach.call(parent.querySelectorAll('.entry-list'), function(b){ b.style.display = 'none'; });
+  }
+  if(!willOpen){ CAT_DRILL_OPEN = null; return; }
+  openCatDrill(rowId);
 }
 function renderDonut(cid, key, bd){
   var c = document.getElementById(cid);
@@ -1501,8 +1597,27 @@ function renderDonut(cid, key, bd){
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '62%',
-      plugins: { legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12, padding: 8 } },
-        tooltip: { callbacks: { label: function(x){ return ' ' + fmt(x.raw); } } } }
+      plugins: {
+        legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12, padding: 8,
+          /* Le pourcentage dans la legende : sans lui, il fallait survoler
+             chaque part pour comprendre la repartition. */
+          generateLabels: function(ch){
+            var ds = ch.data.datasets[0];
+            var som = ds.data.reduce(function(s, v){ return s + v; }, 0) || 1;
+            return ch.data.labels.map(function(lab, i){
+              return {
+                text: lab + '  ' + ((ds.data[i] / som) * 100).toFixed(0) + '%',
+                fillStyle: ds.backgroundColor[i],
+                strokeStyle: ds.backgroundColor[i],
+                lineWidth: 0,
+                index: i
+              };
+            });
+          } } },
+        tooltip: { callbacks: { label: function(x){
+          var som = x.dataset.data.reduce(function(s, v){ return s + v; }, 0) || 1;
+          return ' ' + fmt(x.raw) + '  (' + ((x.raw / som) * 100).toFixed(1) + '%)';
+        } } } }
     }
   });
 }
@@ -2067,8 +2182,8 @@ function renderDay(){
     if(gains.length) html += '<div style="font-size:12px;color:var(--text-3);margin-bottom:4px">Gains</div><div id="tmp-gain"></div>';
     if(deps.length) html += '<div style="font-size:12px;color:var(--text-3);margin:10px 0 4px">Dépenses</div><div id="tmp-dep"></div>';
     el.innerHTML = html;
-    if(gains.length) renderCatBars('tmp-gain', gains, GAIN_COL);
-    if(deps.length) renderCatBars('tmp-dep', deps, DEP_COL);
+    if(gains.length) renderCatBars('tmp-gain', gains, GAIN_COL, { date: d }, 'gain');
+    if(deps.length) renderCatBars('tmp-dep', deps, DEP_COL, { date: d }, 'depense');
   }
   renderEntryList('day-list', arr);
 }
@@ -2104,8 +2219,8 @@ function renderMonth(){
     'Gain moy./jour : <b>' + fmt(dp > 0 ? g / dp : 0) + '</b><br>' +
     (cur ? 'Projection fin de mois : <b>' + fmt(avgD * days) + '</b>'
          : 'Solde final : <b class="' + ((g - d) >= 0 ? 'sol-pos' : 'sol-neg') + '">' + ((g - d) >= 0 ? '+' : '') + fmt(g - d) + '</b>') + comp;
-  renderCatBars('month-cats-gain', catBreakdown(arr, 'gain'), GAIN_COL);
-  renderCatBars('month-cats-dep', catBreakdown(arr, 'depense'), DEP_COL);
+  renderCatBars('month-cats-gain', catBreakdown(arr, 'gain'), GAIN_COL, { month: pre }, 'gain');
+  renderCatBars('month-cats-dep', catBreakdown(arr, 'depense'), DEP_COL, { month: pre }, 'depense');
   renderDonut('month-donut', 'monthDonut', catBreakdown(arr, 'depense'));
   renderMonthChart(arr, y, m);
   renderBalanceChart(arr, y, m);
@@ -2211,8 +2326,8 @@ function renderYear(){
   } else {
     document.getElementById('forecast').innerHTML = '<div class="empty">Pas assez de données</div>';
   }
-  renderCatBars('year-cats-gain', catBreakdown(arr, 'gain'), GAIN_COL);
-  renderCatBars('year-cats-dep', catBreakdown(arr, 'depense'), DEP_COL);
+  renderCatBars('year-cats-gain', catBreakdown(arr, 'gain'), GAIN_COL, { year: y }, 'gain');
+  renderCatBars('year-cats-dep', catBreakdown(arr, 'depense'), DEP_COL, { year: y }, 'depense');
 }
 function renderBudgets(){
   var now = new Date();
