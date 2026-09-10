@@ -524,7 +524,7 @@ details[open] summary::after{transform:rotate(-135deg)}
      vivent en localStorage, l'export JSON est le seul filet. -->
 <div class="alert alert-warn" id="backup-reminder" style="display:none;align-items:center;gap:10px">
   <span id="backup-reminder-text" style="flex:1;min-width:0"></span>
-  <button class="btn btn-sm" onclick="exportJSON()" style="flex:0 0 auto">Exporter</button>
+  <button class="btn btn-sm" onclick="shareBackup()" style="flex:0 0 auto">Sauvegarder</button>
   <button class="btn btn-sm" onclick="snoozeBackup()" style="flex:0 0 auto;width:36px;padding:0" title="Plus tard">✕</button>
 </div>
 
@@ -814,6 +814,9 @@ details[open] summary::after{transform:rotate(-135deg)}
 
     <div class="card">
       <div class="section-title">Export & sauvegarde</div>
+      <!-- Revele par initUI() uniquement si le partage de fichier existe, sinon
+           ce bouton ferait doublon avec le telechargement juste en dessous. -->
+      <button class="btn btn-primary" id="btn-share-backup" onclick="shareBackup()" style="width:100%;margin-bottom:8px;display:none">📤 Envoyer la sauvegarde</button>
       <button class="btn btn-primary" onclick="exportCSV()" style="width:100%;margin-bottom:8px">Télécharger CSV</button>
       <button class="btn" onclick="exportJSON()" style="width:100%;margin-bottom:8px">Sauvegarde JSON</button>
       <label class="btn" style="width:100%;display:block;text-align:center;cursor:pointer">
@@ -871,6 +874,10 @@ details[open] summary::after{transform:rotate(-135deg)}
       </div>
       <div id="del-msg" style="font-size:13px;margin-top:10px"></div>
     </div>
+
+    <!-- Repere de version : permet de savoir d'un coup d'oeil si le telephone
+         tourne encore sur une page gardee en cache. A bumper avec CACHE dans sw.js. -->
+    <div style="font-size:12px;color:var(--text-3);text-align:center;padding:4px 0 8px" id="app-version"></div>
   </div>
 </div>
 
@@ -902,9 +909,12 @@ var MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août'
 /* Valeurs de repli : readTheme() les remplace par les jetons de la feuille
    de style des que le DOM existe, et de nouveau a chaque bascule clair/sombre. */
 var GAIN_COL = '#1D9E75', DEP_COL = '#D85A30', NEUTRAL = '#888';
-var THEME = { warn:'#B8741A', text3:'#6b6b70', surface:'#fff', chart1:'#4A6FA5',
+var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', chart1:'#4A6FA5',
               chart1Fill:'rgba(74,111,165,.13)', chart2:'#8E6CB8', chart2Fill:'rgba(142,108,184,.13)' };
 var MAX_SANE_AMOUNT = 5000000;
+/* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
+   distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
+var APP_VERSION = 'v8';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -926,6 +936,7 @@ function cssVar(n, repli){
 function readTheme(){
   THEME = {
     warn:       cssVar('--warn', THEME.warn),
+    text:       cssVar('--text', THEME.text),
     text3:      cssVar('--text-3', THEME.text3),
     surface:    cssVar('--surface', THEME.surface),
     chart1:     cssVar('--chart-1', THEME.chart1),
@@ -1599,7 +1610,7 @@ function renderDonut(cid, key, bd){
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '62%',
       plugins: {
-        legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12, padding: 8,
+        legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12, padding: 8, color: THEME.text,
           /* Le pourcentage dans la legende : sans lui, il fallait survoler
              chaque part pour comprendre la repartition. */
           generateLabels: function(ch){
@@ -2396,12 +2407,46 @@ function exportCSV(){
   var b = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
   downloadBlob(b, 'finances_' + today() + '.csv');
 }
-function exportJSON(){
+function backupBlob(){
   var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned, exported_at: new Date().toISOString() };
-  var b = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
-  downloadBlob(b, 'finances_backup_' + today() + '.json');
+  return new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+}
+function backupName(){ return 'finances_backup_' + today() + '.json'; }
+function markBackedUp(){
   lastBackup = today();
-  storageSet('budget_last_backup', lastBackup).then(renderBackupReminder);
+  return storageSet('budget_last_backup', lastBackup).then(renderBackupReminder);
+}
+function exportJSON(){
+  downloadBlob(backupBlob(), backupName());
+  markBackedUp();
+}
+
+/* ---------- faire sortir la sauvegarde du telephone ----------
+   Telechargee, elle atterrit dans les Telechargements : le meme appareil que les
+   donnees. Telephone perdu, casse ou vole, la sauvegarde part avec — le rappel a
+   30 jours protege de l'oubli, pas de la perte. navigator.share l'envoie vers
+   WhatsApp, Drive ou un mail en un geste ; un message a soi-meme devient une
+   vraie sauvegarde hors appareil. Repli sur le telechargement si indisponible
+   (tous les navigateurs de bureau, et Android avant Chrome 75). */
+function canShareBackup(){
+  try {
+    if(!navigator.share || !navigator.canShare || typeof File !== 'function') return false;
+    return navigator.canShare({ files: [new File(['{}'], 'test.json', { type: 'application/json' })] });
+  } catch(e){ return false; }
+}
+function shareBackup(){
+  var msg = document.getElementById('import-msg');
+  if(!canShareBackup()){ exportJSON(); return; }
+  /* share() exige le geste utilisateur : rien d'asynchrone avant l'appel. */
+  var f = new File([backupBlob()], backupName(), { type: 'application/json' });
+  navigator.share({ files: [f], title: 'Sauvegarde finances' }).then(function(){
+    markBackedUp();
+    if(msg){ msg.style.color = GAIN_COL; msg.textContent = '✓ Sauvegarde partagée — ' + entries.length + ' entrée(s).'; }
+  }).catch(function(err){
+    /* AbortError = feuille de partage refermee : choix de l'utilisateur, pas une panne. */
+    if(err && err.name === 'AbortError') return;
+    exportJSON();
+  });
 }
 
 /* ---------- rappel de sauvegarde ----------
@@ -2697,6 +2742,8 @@ function renderAll(){
      rendu avec les couleurs de l'autre theme est bien plus visible qu'un
      getComputedStyle de plus. */
   readTheme();
+  var ver = document.getElementById('app-version');
+  if(ver) ver.textContent = 'Version ' + APP_VERSION;
   renderBackupReminder();
   populateSelects();
   renderShortcuts();
@@ -2770,7 +2817,23 @@ function initUI(){
   updateDateFlag();
   setupHero('hero-input', 'hero-msg', 'hero-preview');
   setupHero('hero-input-pro', 'hero-msg-pro', 'hero-preview-pro');
+  var sb = document.getElementById('btn-share-backup');
+  if(sb && canShareBackup()) sb.style.display = '';
+  requestPersistence();
   setMode(mode);
+}
+
+/* Android peut evincer le localStorage quand il manque de place, sans prevenir.
+   Cette demande transforme le stockage en « persistant » : accordee d'office
+   quand l'app est installee en PWA. Silencieuse et sans effet ailleurs. */
+function requestPersistence(){
+  try {
+    if(navigator.storage && navigator.storage.persist && navigator.storage.persisted){
+      navigator.storage.persisted().then(function(already){
+        if(!already) return navigator.storage.persist();
+      }).catch(function(){});
+    }
+  } catch(e){}
 }
 
 /* Bascule clair/sombre du systeme : on relit les jetons et on redessine.
