@@ -914,7 +914,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v8';
+var APP_VERSION = 'v9';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1621,6 +1621,14 @@ function renderDonut(cid, key, bd){
                 text: lab + '  ' + ((ds.data[i] / som) * 100).toFixed(0) + '%',
                 fillStyle: ds.backgroundColor[i],
                 strokeStyle: ds.backgroundColor[i],
+                /* Indispensable : Chart.js peint chaque etiquette avec
+                   ctx.fillStyle = legendItem.fontColor. Sans cette ligne il vaut
+                   undefined, Canvas2D ignore l'affectation et garde sa valeur par
+                   defaut — du NOIR, invisible en mode sombre. L'option
+                   labels.color ci-dessus n'est pas consultee sur ce chemin, et le
+                   generateLabels par defaut de Chart.js pose ce champ lui-meme :
+                   c'est en le remplacant qu'on perd le reglage. */
+                fontColor: THEME.text,
                 lineWidth: 0,
                 index: i
               };
