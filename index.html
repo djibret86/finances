@@ -847,6 +847,17 @@ details[open] summary::after{transform:rotate(-135deg)}
       <div style="font-size:12px;color:var(--text-3);margin-top:8px;text-align:right" id="hist-count"></div>
     </div>
 
+    <!-- Ce que l'app a retenu de tes corrections. Rien ne doit s'apprendre en
+         cachette : chaque regle est listee et supprimable une par une. -->
+    <div class="card" id="learned-card" style="display:none">
+      <div class="section-title">🧠 Catégories apprises</div>
+      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:12px">
+        Quand tu corriges la catégorie d'une entrée, l'app retient le mot et l'applique aux prochaines saisies.
+      </div>
+      <div id="learned-list"></div>
+      <button class="btn btn-danger btn-sm" onclick="forgetAllCats()" style="width:100%;margin-top:10px">Tout oublier</button>
+    </div>
+
     <div class="card">
       <div class="section-title" style="color:var(--dep)">Supprimer des données</div>
       <label>Une journée</label>
@@ -914,7 +925,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v9';
+var APP_VERSION = 'v10';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1144,6 +1155,9 @@ function load(){
     return storageGet('budget_backup_snooze');
   }).then(function(r){
     if(r && r.value) snoozeUntil = r.value;
+    return storageGet('budget_learned_cats');
+  }).then(function(r){
+    if(r && r.value){ try { learnedCats = JSON.parse(r.value) || {}; } catch(e){} }
     setStorageStatus(true);
   });
 }
@@ -1315,8 +1329,66 @@ function matchesKeyword(d, kw){
   }
   return false;
 }
+/* ---------- categories apprises ----------
+   Les mots-cles livres avec l'app ne connaitront jamais les noms de boutiques,
+   les prenoms de fournisseurs ni le vocabulaire local. Plutot que d'attendre une
+   mise a jour du code, on retient ce que l'utilisateur corrige : une categorie
+   changee a la main devient une regle, appliquee aux saisies suivantes.
+   Cle = « type|mot », pour qu'un mot ne traverse pas la frontiere gain/depense. */
+var learnedCats = {};
+function saveLearned(){ return storageSet('budget_learned_cats', JSON.stringify(learnedCats)); }
+
+/* Mots trop generiques pour porter une categorie a eux seuls : les retenir
+   ferait deraper toutes les saisies suivantes (« achat » -> Alimentation
+   classerait ensuite « achat ciment »). */
+var MOTS_VIDES = {};
+'achat achats acheter paiement payer paye payé regle réglé frais pour chez avec dans des les une mon mes ses sur par aux que qui est argent montant total divers autre part mois jour jours semaine hier demain franc francs cfa fcfa petit grand'
+  .split(' ').forEach(function(m){ MOTS_VIDES[m] = 1; });
+
+/* On ne retient qu'UN mot par correction — le plus long qui ait du sens. Une
+   regle par correction reste previsible et lisible dans la liste ; si elle ne
+   suffit pas, la correction suivante en ajoutera une autre. */
+function motSignificatif(desc){
+  var mots = String(desc).toLowerCase()
+    .replace(/[^a-z0-9àâäéèêëîïôöùûüç]+/g, ' ').trim().split(/\s+/);
+  var best = null;
+  for(var i = 0; i < mots.length; i++){
+    var m = mots[i];
+    if(m.length < 3 || /^\d+$/.test(m) || MOTS_VIDES[m]) continue;
+    if(!best || m.length > best.length) best = m;
+  }
+  return best;
+}
+function learnCat(desc, type, cat){
+  var w = motSignificatif(desc);
+  if(!w) return Promise.resolve(null);
+  learnedCats[type + '|' + w] = cat;
+  return saveLearned().then(function(){ return w; });
+}
+function forgetCat(key){
+  delete learnedCats[key];
+  saveLearned().then(renderAll);
+}
+function forgetAllCats(){
+  uiConfirm('Oublier les ' + Object.keys(learnedCats).length + ' association(s) apprises ?'
+    + '\n<span style="font-size:12px;color:var(--text-3)">Les entrées déjà classées ne changent pas.</span>', 'Oublier')
+    .then(function(ok){ if(!ok) return; learnedCats = {}; saveLearned().then(renderAll); });
+}
+function learnedCat(d, type){
+  var best = null, bestLen = 0, pre = type + '|';
+  for(var k in learnedCats){
+    if(k.indexOf(pre) !== 0) continue;
+    var w = k.slice(pre.length);
+    if(w.length > bestLen && matchesKeyword(d, w)){ best = learnedCats[k]; bestLen = w.length; }
+  }
+  return best;
+}
 function autoCat(desc, type){
   var d = String(desc).toLowerCase();
+  /* Ce que l'utilisateur a corrige prime sur les mots-cles livres : c'est une
+     intention explicite, pas une devinette. */
+  var appris = learnedCat(d, type);
+  if(appris && CATS[type].indexOf(appris) !== -1) return appris;
   var list = AUTO_CAT[type];
   var best = null, bestLen = 0;
   for(var i = 0; i < list.length; i++){
@@ -1747,14 +1819,21 @@ function saveEdit(){
   var date = document.getElementById('edit-date').value;
   var amount = parseFloat(document.getElementById('edit-amount').value);
   if(!date || !amount || amount <= 0){ uiAlert('Date ou montant invalide.'); return; }
+  var ancienneCat = e.cat;
   e.date = date;
   e.type = document.getElementById('edit-type').value;
   e.cat = document.getElementById('edit-cat').value;
   e.amount = amount;
   e.desc = document.getElementById('edit-desc').value.trim();
+  /* Corriger une categorie, c'est enseigner : on en tire une regle pour la suite.
+     Uniquement si la categorie a change — reenregistrer une entree sans y toucher
+     n'apprend rien. */
+  var apprentissage = (e.cat !== ancienneCat)
+    ? learnCat(e.desc, e.type, e.cat)
+    : Promise.resolve(null);
   entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
   editingId = null;
-  save().then(renderAll);
+  Promise.all([save(), apprentissage]).then(renderAll);
 }
 function checkBudgetAlert(en){
   if(en.type !== 'depense') return '';
@@ -2416,7 +2495,8 @@ function exportCSV(){
   downloadBlob(b, 'finances_' + today() + '.csv');
 }
 function backupBlob(){
-  var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned, exported_at: new Date().toISOString() };
+  var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned,
+            learnedCats: learnedCats, exported_at: new Date().toISOString() };
   return new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
 }
 function backupName(){ return 'finances_backup_' + today() + '.json'; }
@@ -2464,6 +2544,27 @@ function shareBackup(){
 var BACKUP_DAYS = 30;
 function daysBetween(a, b){
   return Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 86400000);
+}
+function renderLearned(){
+  var card = document.getElementById('learned-card');
+  if(!card) return;
+  var cles = Object.keys(learnedCats).sort();
+  if(!cles.length){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  document.getElementById('learned-list').innerHTML = cles.map(function(k){
+    var sep = k.indexOf('|');
+    var type = k.slice(0, sep), mot = k.slice(sep + 1), cat = learnedCats[k];
+    return '<div class="cat-row" style="gap:8px">' +
+      '<div class="cat-name" style="flex:1;min-width:0">' +
+        '<b>' + esc(mot) + '</b> <span style="color:var(--text-3)">→</span> ' +
+        (CAT_ICONS[cat] || '') + ' ' + esc(cat) +
+        '<div style="font-size:11px;color:var(--text-3);margin-top:2px">' +
+          (type === 'gain' ? 'gains' : 'dépenses') + '</div>' +
+      '</div>' +
+      '<button class="btn btn-sm" onclick="forgetCat(\'' + esc(k).replace(/'/g, "\\'") + '\')" ' +
+        'style="flex:0 0 auto;width:36px;padding:0" title="Oublier">✕</button>' +
+    '</div>';
+  }).join('');
 }
 function renderBackupReminder(){
   var el = document.getElementById('backup-reminder');
@@ -2518,6 +2619,22 @@ function sanitizeBudgets(obj){
   });
   return clean;
 }
+/* Une sauvegarde peut avoir ete bricolee a la main : on ne garde que des cles
+   « type|mot » pointant vers une categorie qui existe encore. */
+function sanitizeLearned(obj){
+  var clean = {};
+  if(!obj || typeof obj !== 'object') return clean;
+  Object.keys(obj).forEach(function(k){
+    var sep = String(k).indexOf('|');
+    if(sep < 1) return;
+    var type = k.slice(0, sep), mot = k.slice(sep + 1), cat = obj[k];
+    if(type !== 'gain' && type !== 'depense') return;
+    if(!mot || mot.length < 3) return;
+    if(typeof cat !== 'string' || CATS[type].indexOf(cat) === -1) return;
+    clean[k] = cat;
+  });
+  return clean;
+}
 function importJSON(ev){
   var f = ev.target.files[0];
   var msg = document.getElementById('import-msg');
@@ -2542,10 +2659,15 @@ function importJSON(ev){
           var nb = sanitizeBudgets(d.budgets);
           Object.keys(nb).forEach(function(k){ budgets[k] = nb[k]; });
         }
+        /* Les categories apprises voyagent avec la sauvegarde, sinon restaurer
+           sur un nouveau telephone effacerait tout ce que l'app a retenu. */
+        var LC = sanitizeLearned(d.learnedCats);
+        if(rep) learnedCats = LC;
+        else Object.keys(LC).forEach(function(k){ learnedCats[k] = LC[k]; });
         entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
         planned.sort(function(a, b){ return a.date.localeCompare(b.date); });
         syncIdCounter();
-        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned()]).then(function(){
+        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned()]).then(function(){
           msg.style.color = GAIN_COL;
           msg.textContent = '✓ Restauré — ' + entries.length + ' entrée(s), ' + planned.length + ' prévision(s).';
           renderAll();
@@ -2705,7 +2827,7 @@ function renderCurrentProTab(){
   else if(id === 'mois') renderMonth();
   else if(id === 'annee') renderYear();
   else if(id === 'budgets') renderBudgets();
-  else if(id === 'export'){ renderRepair(); renderHist(); }
+  else if(id === 'export'){ renderRepair(); renderLearned(); renderHist(); }
 }
 function populateSelects(){
   var now = new Date(), cy = now.getFullYear();
