@@ -1,7 +1,7 @@
-﻿/* Service worker — rend l'application utilisable sans connexion.
+/* Service worker — rend l'application utilisable sans connexion.
    Pour publier une mise à jour, incrémente CACHE ci-dessous (finances-v2, v3...)
    ET APP_VERSION dans index.html : les deux doivent rester d'accord. */
-var CACHE = 'finances-v10';
+var CACHE = 'finances-v11';
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 /* addAll() passait par le cache HTTP du navigateur : GitHub Pages sert index.html

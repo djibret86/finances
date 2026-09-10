@@ -683,7 +683,10 @@ details[open] summary::after{transform:rotate(-135deg)}
       <div class="section-title">Dépenses / gains prévus</div>
       <label>Date de départ</label>
       <input type="date" id="planned-start-date" style="margin-bottom:8px">
-      <textarea id="planned-input" rows="6" placeholder="Portable: -50000&#10;Chambre: -15000 x10j&#10;Vente: +49000 x10j"></textarea>
+      <textarea id="planned-input" rows="6" placeholder="Portable: -50000&#10;Chambre: -15000 x10j&#10;Loyer: -150000 x12m"></textarea>
+      <div style="font-size:12px;color:var(--text-3);margin-top:6px;line-height:1.5">
+        <code>x10j</code> répète 10 jours de suite · <code>x12m</code> répète le même jour <b>chaque mois</b>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
         <span id="planned-preview" style="font-size:12px;color:var(--text-3)"></span>
         <button class="btn btn-primary btn-sm" onclick="addPlanned()">Ajouter</button>
@@ -925,7 +928,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v10';
+var APP_VERSION = 'v11';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1064,6 +1067,18 @@ function today(){
 function addDays(d, n){
   var x = new Date(d + 'T12:00');
   x.setDate(x.getDate() + n);
+  return x.toISOString().slice(0,10);
+}
+/* Meme quantieme le mois suivant, rabattu sur le dernier jour quand il n'existe
+   pas : un loyer du 31 tombe le 28 en fevrier, et non le 3 mars comme le ferait
+   un setMonth() naif. On passe par le 1er pour eviter ce debordement. */
+function addMonths(d, n){
+  var x = new Date(d + 'T12:00');
+  var quantieme = x.getDate();
+  x.setDate(1);
+  x.setMonth(x.getMonth() + n);
+  var dernier = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+  x.setDate(Math.min(quantieme, dernier));
   return x.toISOString().slice(0,10);
 }
 function syncIdCounter(){
@@ -1463,20 +1478,29 @@ function parsePlannedLine(line){
   if(!line) return null;
   var rest = String(line).trim();
   if(!rest) return null;
-  var count = 1;
-  var rm = rest.match(/^(.*?)\s*pendant\s+(\d{1,3})\s*jours?\s*$/i);
-  if(!rm) rm = rest.match(/^(.*?)\s*[x×\/]\s*(\d{1,3})\s*(?:j|jours?)\s*$/i);
+  var count = 1, unit = 'jour';
+  /* L'unite est capturee : « x10j » repete 10 jours de suite, « x12m » repete le
+     meme quantieme pendant 12 mois — c'est le cas du loyer, de la scolarite ou
+     de la tontine, qu'il fallait retaper chaque mois. Sans unite, on reste sur
+     des jours, comme avant. */
+  var rm = rest.match(/^(.*?)\s*pendant\s+(\d{1,3})\s*(jours?|mois)\s*$/i);
+  if(!rm) rm = rest.match(/^(.*?)\s*[x×\/]\s*(\d{1,3})\s*(jours?|mois|j|m)\s*$/i);
   if(!rm){
     var bare = rest.match(/^(.*?)\s+[x×]\s*(\d{1,3})\s*$/i);
     if(bare && !/\d\s*[x×*]\s*\d/.test(bare[1])) rm = bare;
   }
   if(rm){
     var n = parseInt(rm[2], 10);
-    if(n > 1 && n <= 366 && /\d/.test(rm[1])){ rest = rm[1].trim(); count = n; }
+    var enMois = String(rm[3] || 'j').toLowerCase().charAt(0) === 'm';
+    var maxi = enMois ? 60 : 366;
+    if(n > 1 && n <= maxi && /\d/.test(rm[1])){
+      rest = rm[1].trim(); count = n; unit = enMois ? 'mois' : 'jour';
+    }
   }
   var base = parseQuickLine(rest);
   if(!base) return null;
   base.count = count;
+  base.unit = unit;
   return base;
 }
 /* ---------- saisie antidatée ----------
@@ -1961,7 +1985,8 @@ function addPlanned(){
     posts++;
     for(var i = 0; i < p.count; i++){
       candidates.push({
-        date: addDays(start, i), type: p.type, cat: p.cat, amount: p.amount,
+        date: (p.unit === 'mois') ? addMonths(start, i) : addDays(start, i),
+        type: p.type, cat: p.cat, amount: p.amount,
         desc: p.desc + (p.count > 1 ? ' (' + (i+1) + '/' + p.count + ')' : '')
       });
     }
@@ -2932,8 +2957,17 @@ document.getElementById('planned-input').addEventListener('input', function(){
   var tl = p.reduce(function(s, x){ return s + x.count; }, 0);
   var g = p.filter(function(x){ return x.type === 'gain'; }).reduce(function(s, x){ return s + x.amount * x.count; }, 0);
   var d = p.filter(function(x){ return x.type === 'depense'; }).reduce(function(s, x){ return s + x.amount * x.count; }, 0);
+  /* Montrer jusqu'ou s'etend la serie : « 12 lignes » ne dit pas la meme chose
+     selon qu'on repete 12 jours ou 12 mois. */
+  var dep = document.getElementById('planned-start-date').value || today();
+  var fin = null;
+  p.forEach(function(x){
+    var last = (x.unit === 'mois') ? addMonths(dep, x.count - 1) : addDays(dep, x.count - 1);
+    if(!fin || last > fin) fin = last;
+  });
+  var jusqua = (fin && fin !== dep) ? ' · jusqu\'au ' + fin.slice(8,10) + '/' + fin.slice(5,7) + '/' + fin.slice(0,4) : '';
   document.getElementById('planned-preview').textContent = p.length
-    ? p.length + ' poste(s) → ' + tl + ' ligne(s) — +' + fmtShort(g) + ' | -' + fmtShort(d)
+    ? p.length + ' poste(s) → ' + tl + ' ligne(s) — +' + fmtShort(g) + ' | -' + fmtShort(d) + jusqua
     : '';
 });
 
