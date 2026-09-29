@@ -543,7 +543,9 @@ details[open] summary::after{transform:rotate(-135deg)}
     </div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--text-3);display:flex;justify-content:space-between;gap:12px;text-align:left">
       <span id="lite-month-label">Ce mois-ci<br><b id="lite-month" style="font-size:15px"></b></span>
-      <span style="text-align:right">Solde global cumulé<br><b id="lite-global" style="font-size:15px"></b></span>
+      <span style="text-align:right"><span id="lite-global-label">Solde global cumulé</span><br><b id="lite-global" style="font-size:15px"></b>
+        <br><span id="lite-global-sub" style="font-size:11px"></span>
+        <br><button type="button" class="btn btn-sm" onclick="startCheckpoint()" style="min-height:32px;padding:4px 12px;margin-top:6px;font-size:12.5px">⚖️ Pointer mon solde</button></span>
     </div>
   </div>
 
@@ -556,7 +558,7 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 
   <div class="card card-flat" id="lite-budget-widget" style="display:none">
-    <div style="font-size:12px;color:var(--text-3);margin-bottom:4px">Reste à dépenser aujourd'hui</div>
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:4px">Reste à dépenser aujourd'hui (budgets)</div>
     <div style="font-size:22px;font-weight:600" id="lite-daily-budget"></div>
     <div style="font-size:11px;color:var(--text-3);margin-top:4px" id="lite-daily-detail"></div>
   </div>
@@ -806,6 +808,15 @@ details[open] summary::after{transform:rotate(-135deg)}
       </div>
     </div>
 
+    <!-- Historique des pointages du solde reel. Masquee tant qu'il n'y en a aucun. -->
+    <div class="card" id="checkpoint-card" style="display:none">
+      <div class="section-title">⚖️ Pointages du solde réel</div>
+      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:12px">
+        L'écart mesure ce qui a échappé à la saisie entre deux pointages.
+      </div>
+      <div id="checkpoint-list"></div>
+    </div>
+
     <div class="card">
       <div class="section-title">🩺 Diagnostic de sauvegarde</div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
@@ -928,7 +939,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v11';
+var APP_VERSION = 'v12';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1173,6 +1184,9 @@ function load(){
     return storageGet('budget_learned_cats');
   }).then(function(r){
     if(r && r.value){ try { learnedCats = JSON.parse(r.value) || {}; } catch(e){} }
+    return storageGet('budget_checkpoints');
+  }).then(function(r){
+    if(r && r.value){ try { checkpoints = sanitizeCheckpoints(JSON.parse(r.value)); } catch(e){} }
     setStorageStatus(true);
   });
 }
@@ -1859,6 +1873,168 @@ function saveEdit(){
   editingId = null;
   Promise.all([save(), apprentissage]).then(renderAll);
 }
+/* ---------- annuler la derniere saisie ----------
+   Une faute de frappe (« -30000 » pour « -3000 ») obligeait a retrouver la ligne
+   pour la corriger. Le message de confirmation porte donc un bouton « Annuler »
+   pendant UNDO_MS ; une nouvelle saisie remplace l'annulation proposee. */
+var UNDO_MS = 8000;
+var undoBatch = null;   // { ids, msgEl, timer }
+function offerUndo(msgEl, html, color, ids){
+  if(!msgEl) return;
+  if(undoBatch && undoBatch.timer) clearTimeout(undoBatch.timer);
+  var batch = { ids: ids.slice(), msgEl: msgEl, timer: null };
+  undoBatch = batch;
+  msgEl.style.color = color;
+  msgEl.innerHTML = html + ' <button class="btn btn-sm" onclick="undoLast()" ' +
+    'style="min-height:32px;padding:4px 12px;margin-left:6px;vertical-align:middle">↩︎ Annuler</button>';
+  batch.timer = setTimeout(function(){
+    if(undoBatch === batch){ undoBatch = null; msgEl.innerHTML = ''; }
+  }, UNDO_MS);
+}
+function undoLast(){
+  var b = undoBatch;
+  if(!b) return;
+  clearTimeout(b.timer);
+  undoBatch = null;
+  var ids = {};
+  b.ids.forEach(function(i){ ids[i] = 1; });
+  var avant = entries.length;
+  entries = entries.filter(function(e){ return !ids[e.id]; });
+  var n = avant - entries.length;
+  save().then(function(){
+    renderAll();
+    b.msgEl.style.color = THEME.text3;
+    b.msgEl.textContent = n ? '↩︎ Saisie annulée' + (n > 1 ? ' (' + n + ' entrées)' : '') + '.' : 'Rien à annuler.';
+    setTimeout(function(){ if(!undoBatch) b.msgEl.textContent = ''; }, 3000);
+  });
+}
+/* ---------- pointage du solde reel ----------
+   Le « solde global cumule » part de 0 le jour de l'installation : ce n'est pas
+   l'argent reellement possede, et chaque depense oubliee l'en eloigne. Pointer,
+   c'est donner a l'app ce qu'on a vraiment (liquide + Wave + Orange Money +
+   banque). Elle en deduit un solde reel estime, et au pointage suivant l'ECART :
+   ce qui a echappe a la saisie.
+
+   Quelles entrees modifient l'estimation depuis un pointage ? Celles CREEES apres
+   lui (l'id encode l'instant de creation, cf. nextId) et DATEES du jour du
+   pointage ou apres. Une entree antidatee saisie apres coup est deja comprise
+   dans le solde qu'on a compte : l'ajouter encore la compterait deux fois. Une
+   entree du meme jour mais saisie apres le pointage, elle, doit compter — d'ou
+   l'id plutot que la seule date. */
+var checkpoints = [];   // [{ date, real, mark, ecart, recorded }]
+var MAX_CHECKPOINTS = 60;
+function saveCheckpoints(){ return storageSet('budget_checkpoints', JSON.stringify(checkpoints)); }
+function lastCheckpoint(){ return checkpoints.length ? checkpoints[checkpoints.length - 1] : null; }
+function sinceCheckpoint(cp){
+  var t = today(), s = 0;
+  entries.forEach(function(e){
+    if(e.id >= cp.mark && e.date >= cp.date && e.date <= t) s += (e.type === 'gain' ? e.amount : -e.amount);
+  });
+  return s;
+}
+function estimatedBalance(){
+  var cp = lastCheckpoint();
+  return cp ? cp.real + sinceCheckpoint(cp) : null;
+}
+function pushCheckpoint(cp){
+  /* La marque doit depasser tout id deja attribue : l'entree « Ecart de pointage »
+     est creee dans la meme milliseconde que le pointage, et nextId() y ajoute un
+     compteur — sans ce max, elle passerait au-dessus de la marque et l'ecart serait
+     compte deux fois. On ignore les ids venus d'une horloge en avance (> 1 s). */
+  var now = Date.now() * 1000, plafond = now + 1000000, maxId = 0;
+  entries.forEach(function(e){ if(e.id > maxId && e.id <= plafond) maxId = e.id; });
+  cp.mark = Math.max(now, maxId + 1);   // toute entree creee ensuite aura un id >= mark
+  checkpoints.push(cp);
+  if(checkpoints.length > MAX_CHECKPOINTS) checkpoints = checkpoints.slice(-MAX_CHECKPOINTS);
+  return saveCheckpoints().then(renderAll);
+}
+function startCheckpoint(){
+  var est = estimatedBalance();
+  uiPrompt('<b>⚖️ Pointer ton solde réel</b><br>Additionne tout ce que tu as maintenant : liquide, Wave, Orange Money, banque.' +
+    (est !== null ? '<br><span style="font-size:12px;color:var(--text-3)">L\'app estime ' + fmt(est) + '.</span>' : ''), '', true)
+  .then(function(raw){
+    if(raw === null) return;
+    var digits = String(raw).replace(/[^\d]/g, '');
+    if(!digits){ uiAlert('Montant invalide.'); return; }
+    return recordCheckpoint(parseInt(digits, 10));
+  });
+}
+function recordCheckpoint(real){
+  var t = today(), prev = lastCheckpoint();
+  if(!prev){
+    return pushCheckpoint({ date: t, real: real, ecart: null, recorded: false }).then(function(){
+      return uiAlert('✅ <b>Point de départ : ' + fmt(real) + '</b><br><br>Le solde affiché suit désormais ton argent réel. ' +
+        'Au prochain pointage, l\'app te dira combien a échappé à la saisie.');
+    });
+  }
+  var attendu = prev.real + sinceCheckpoint(prev);
+  var ecart = real - attendu;
+  if(ecart === 0){
+    return pushCheckpoint({ date: t, real: real, ecart: 0, recorded: false }).then(function(){
+      return uiAlert('✅ <b>Pile juste</b> — tout a été saisi depuis le ' + fmtDateFR(prev.date) + '.');
+    });
+  }
+  var perte = ecart < 0;
+  return uiConfirm('Attendu : <b>' + fmt(attendu) + '</b><br>Réel : <b>' + fmt(real) + '</b><br><br>' +
+      '<b style="color:var(--' + (perte ? 'dep' : 'gain') + '-strong)">Écart : ' + (perte ? '−' : '+') + fmt(Math.abs(ecart)) + '</b> — ' +
+      (perte ? 'des dépenses' : 'des rentrées') + ' non saisies depuis le ' + fmtDateFR(prev.date) + '.<br><br>' +
+      'L\'enregistrer comme ' + (perte ? 'dépense' : 'gain') + ' « Écart de pointage » ?' +
+      '<br><span style="font-size:12px;color:var(--text-3)">Sinon l\'écart reste hors des statistiques, mais le solde est recalé quand même.</span>',
+      'Enregistrer l\'écart', 'Laisser tel quel')
+  .then(function(rec){
+    /* L'entree d'ecart est creee AVANT le nouveau pointage : son id reste donc
+       sous la nouvelle marque, et elle n'est pas recomptee dans l'estimation. */
+    var avant = rec ? (function(){
+      entries.push({ id: nextId(), date: t, type: perte ? 'depense' : 'gain', cat: 'Autre',
+                     amount: Math.abs(ecart), desc: 'Écart de pointage' });
+      entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+      return save();
+    })() : Promise.resolve();
+    return avant.then(function(){
+      return pushCheckpoint({ date: t, real: real, ecart: ecart, recorded: !!rec });
+    });
+  });
+}
+function deleteCheckpoint(mark){
+  uiConfirm('Supprimer ce pointage ?<br><span style="font-size:12px;color:var(--text-3)">' +
+    'L\'éventuelle entrée « Écart de pointage » reste dans l\'historique.</span>', 'Supprimer').then(function(ok){
+    if(!ok) return;
+    checkpoints = checkpoints.filter(function(c){ return c.mark !== mark; });
+    saveCheckpoints().then(renderAll);
+  });
+}
+function renderCheckpoints(){
+  var card = document.getElementById('checkpoint-card');
+  if(!card) return;
+  if(!checkpoints.length){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  document.getElementById('checkpoint-list').innerHTML = checkpoints.slice().reverse().map(function(c){
+    var e = c.ecart;
+    var ecartTxt = (e === null || e === undefined)
+      ? '<span style="color:var(--text-3)">point de départ</span>'
+      : (e === 0 ? '<span class="gain-color">pile juste</span>'
+         : '<span class="' + (e < 0 ? 'dep-color' : 'gain-color') + '">écart ' + (e < 0 ? '−' : '+') + fmt(Math.abs(e)) + '</span>' +
+           (c.recorded ? ' <span style="color:var(--text-3)">· enregistré</span>' : ''));
+    return '<div class="cat-row" style="gap:8px">' +
+      '<div style="flex:1;min-width:0;font-size:14px"><b>' + fmt(c.real) + '</b> · ' + fmtDateFR(c.date) +
+        '<div style="font-size:12px;margin-top:2px">' + ecartTxt + '</div></div>' +
+      '<button class="btn btn-sm" onclick="deleteCheckpoint(' + c.mark + ')" style="flex:0 0 auto;width:36px;padding:0" title="Supprimer">✕</button>' +
+    '</div>';
+  }).join('');
+}
+/* Une sauvegarde peut venir d'ailleurs : on ne garde que des pointages coherents. */
+function sanitizeCheckpoints(list){
+  if(!Array.isArray(list)) return [];
+  return list.filter(function(c){
+    return c && typeof c === 'object' && typeof c.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(c.date)
+      && typeof c.real === 'number' && isFinite(c.real) && typeof c.mark === 'number' && isFinite(c.mark);
+  }).map(function(c){
+    return { date: c.date, real: Math.round(c.real), mark: c.mark,
+             ecart: (typeof c.ecart === 'number' && isFinite(c.ecart)) ? Math.round(c.ecart) : null,
+             recorded: c.recorded === true };
+  }).sort(function(a, b){ return a.mark - b.mark; });
+}
+
 function checkBudgetAlert(en){
   if(en.type !== 'depense') return '';
   var b = budgets[en.cat];
@@ -1878,17 +2054,17 @@ function saveHero(inpId, msgId, prevId){
   var date = p.date;
   confirmIfOddAsync(p.amount, date, p.desc + ' — ' + p.cat + dateSuffix(date)).then(function(ok){
     if(!ok) return;
-    entries.push({ id: nextId(), date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
+    var nid = nextId();
+    entries.push({ id: nid, date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
     entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
     return save().then(function(){
       var al = checkBudgetAlert({ type: p.type, cat: p.cat, date: date });
-      msg.style.color = al ? THEME.warn : GAIN_COL;
-      msg.textContent = '✓ ' + p.desc + ' — ' + p.cat + ' : ' + (p.type === 'gain' ? '+' : '-') + fmt(p.amount) + dateSuffix(date) + al;
+      offerUndo(msg, esc('✓ ' + p.desc + ' — ' + p.cat + ' : ' + (p.type === 'gain' ? '+' : '-') + fmt(p.amount) + dateSuffix(date) + al),
+        al ? THEME.warn : GAIN_COL, [nid]);
       inp.value = '';
       document.getElementById(prevId).textContent = '';
       inp.focus();
       renderAll();
-      setTimeout(function(){ msg.textContent = ''; }, al ? 6000 : 3000);
     });
   });
 }
@@ -1909,16 +2085,18 @@ function saveQuick(){
     : Promise.resolve(true);
   gate.then(function(ok){
     if(!ok) return;
+    var nids = [];
     parsed.forEach(function(p){
-      entries.push({ id: nextId(), date: p.date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
+      var nid = nextId();
+      nids.push(nid);
+      entries.push({ id: nid, date: p.date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
     });
     entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
     return save().then(function(){
       document.getElementById('quick-input').value = '';
       document.getElementById('quick-preview').textContent = '';
       document.getElementById('quick-detail').innerHTML = '';
-      msg.style.color = GAIN_COL;
-      msg.textContent = parsed.length + ' entrée(s) enregistrée(s)' + (fail ? ' — ' + fail + ' ignorée(s)' : '') + '.';
+      offerUndo(msg, esc(parsed.length + ' entrée(s) enregistrée(s)' + (fail ? ' — ' + fail + ' ignorée(s)' : '') + '.'), GAIN_COL, nids);
       renderAll();
     });
   });
@@ -1961,12 +2139,14 @@ function saveEntry(){
   if(!amount || amount <= 0){ msg.style.color = DEP_COL; msg.textContent = 'Montant invalide.'; return; }
   confirmIfOddAsync(amount, date, (desc || cat) + ' — ' + cat).then(function(ok){
     if(!ok) return;
-    entries.push({ id: nextId(), date: date, type: type, cat: cat, amount: amount, desc: desc });
+    var nid = nextId();
+    entries.push({ id: nid, date: date, type: type, cat: cat, amount: amount, desc: desc });
     entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
     return save().then(function(){
-      msg.style.color = GAIN_COL;
-      msg.textContent = 'Enregistré ✓';
+      /* clearForm() vide aussi #f-msg : l'appeler APRES le message l'effacait aussitot,
+         et « Enregistré ✓ » n'etait jamais visible. */
       clearForm();
+      offerUndo(msg, 'Enregistré ✓', GAIN_COL, [nid]);
       renderAll();
     });
   });
@@ -2050,7 +2230,10 @@ function renderPlannedChart(){
   if(charts.planned){ charts.planned.destroy(); charts.planned = null; }
   if(!planned.length){ c.getContext('2d').clearRect(0,0,c.width,c.height); if(sum) sum.innerHTML = ''; return; }
   var t = today();
-  var start = sumType(entries, 'gain') - sumType(entries, 'depense');
+  /* Partir du solde REEL quand il est connu : l'alerte « passage en negatif »
+     ne veut rien dire sur un cumul parti de 0 au jour de l'installation. */
+  var est = estimatedBalance();
+  var start = est !== null ? est : sumType(entries, 'gain') - sumType(entries, 'depense');
   var overdue = planned.filter(function(p){ return p.date < t; });
   var future = planned.filter(function(p){ return p.date >= t; });
   var overdueNet = sumType(overdue, 'gain') - sumType(overdue, 'depense');
@@ -2078,7 +2261,8 @@ function renderPlannedChart(){
   var fin = data[data.length - 1];
   var g = sumType(planned, 'gain'), d = sumType(planned, 'depense');
   if(sum){
-    sum.innerHTML = 'Solde actuel : <b class="' + (start >= 0 ? 'sol-pos' : 'sol-neg') + '">' + (start >= 0 ? '+' : '') + fmt(start) + '</b><br>' +
+    sum.innerHTML = (est !== null ? 'Solde réel estimé' : 'Solde actuel <span style="color:var(--text-3)">(cumul des saisies — pointe ton solde pour une trajectoire réelle)</span>') +
+      ' : <b class="' + (start >= 0 ? 'sol-pos' : 'sol-neg') + '">' + (start >= 0 ? '+' : '') + fmt(start) + '</b><br>' +
       (overdue.length ? '<span style="color:var(--warn)">' + overdue.length + ' échue(s) intégrée(s) (net ' + (overdueNet >= 0 ? '+' : '') + fmt(overdueNet) + ')</span><br>' : '') +
       'Gains prévus : <b class="gain-color">+' + fmt(g) + '</b> · Dépenses : <b class="dep-color">−' + fmt(d) + '</b><br>' +
       'Solde projeté final : <b class="' + (fin >= 0 ? 'sol-pos' : 'sol-neg') + '">' + (fin >= 0 ? '+' : '') + fmt(fin) + '</b>' +
@@ -2191,15 +2375,15 @@ function useShortcut(i){
   var date = (mode === 'lite') ? today() : ((document.getElementById('f-date') || {}).value || today());
   confirmIfOddAsync(p.amount, date, p.desc + ' — ' + p.cat).then(function(ok){
     if(!ok) return;
-    entries.push({ id: nextId(), date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
+    var nid = nextId();
+    entries.push({ id: nid, date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
     entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
     return save().then(function(){
       var msg = document.getElementById(mode === 'lite' ? 'hero-msg' : 'hero-msg-pro');
       var al = checkBudgetAlert({ type: p.type, cat: p.cat, date: date });
-      msg.style.color = al ? THEME.warn : GAIN_COL;
-      msg.textContent = '✓ ' + p.desc + ' : ' + (p.type === 'gain' ? '+' : '-') + fmt(p.amount) + al;
+      offerUndo(msg, esc('✓ ' + p.desc + ' : ' + (p.type === 'gain' ? '+' : '-') + fmt(p.amount) + al),
+        al ? THEME.warn : GAIN_COL, [nid]);
       renderAll();
-      setTimeout(function(){ msg.textContent = ''; }, al ? 6000 : 3000);
     });
   });
 }
@@ -2241,10 +2425,27 @@ function renderLite(){
   document.getElementById('lite-month-label').firstChild.textContent =
     MONTHS[new Date(t + 'T12:00').getMonth()];
 
-  var gs = sumType(entries, 'gain') - sumType(entries, 'depense');
+  /* Une fois pointe, on montre l'argent reel estime plutot qu'un cumul parti de 0
+     au jour de l'installation. */
   var gEl = document.getElementById('lite-global');
-  gEl.textContent = (gs >= 0 ? '+' : '') + fmt(gs);
-  gEl.style.color = gs >= 0 ? GAIN_COL : DEP_COL;
+  var gLab = document.getElementById('lite-global-label');
+  var gSub = document.getElementById('lite-global-sub');
+  var est = estimatedBalance(), cp = lastCheckpoint();
+  if(est !== null){
+    gLab.textContent = 'Solde réel estimé';
+    gEl.textContent = fmt(est);
+    gEl.style.color = est >= 0 ? THEME.text : DEP_COL;
+    var age = daysBetween(cp.date, t);
+    gSub.textContent = age === 0 ? 'pointé aujourd\'hui' : 'pointé il y a ' + age + ' j';
+    gSub.style.color = age >= 7 ? THEME.warn : THEME.text3;   // au-dela d'une semaine, l'estimation derive
+  } else {
+    var gs = sumType(entries, 'gain') - sumType(entries, 'depense');
+    gLab.textContent = 'Solde global cumulé';
+    gEl.textContent = (gs >= 0 ? '+' : '') + fmt(gs);
+    gEl.style.color = gs >= 0 ? GAIN_COL : DEP_COL;
+    gSub.textContent = 'depuis la 1re saisie';
+    gSub.style.color = THEME.text3;
+  }
   renderEntryList('lite-list', arr);
   renderLiteBudgetWidget();
   var monthDeps = catBreakdown(getEntries({ month: t.slice(0,7) }), 'depense');
@@ -2266,22 +2467,39 @@ function renderLiteBudgetWidget(){
   var w = document.getElementById('lite-budget-widget');
   var tot = CATS.depense.reduce(function(s, c){ return s + (budgets[c] || 0); }, 0);
   if(tot <= 0){ w.style.display = 'none'; return; }
-  var now = new Date();
-  var mk = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  var dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  var dl = dim - now.getDate() + 1;
-  var spent = getEntries({ month: mk, type: 'depense' })
-    .filter(function(e){ return budgets[e.cat] > 0; })
-    .reduce(function(s, e){ return s + e.amount; }, 0);
-  var rem = tot - spent;
-  var pd = dl > 0 ? rem / dl : rem;
+  /* L'enveloppe du jour se calcule sur ce qui restait AU REVEIL, puis on en retire
+     ce qui a deja ete depense aujourd'hui. Avant, la depense du jour etait etalee
+     sur tous les jours restants : 45 000 F depenses sur une enveloppe de 50 000
+     affichaient encore 27 500 F disponibles au lieu de 5 000. */
+  var t = today();
+  var dim = new Date(parseInt(t.slice(0,4), 10), parseInt(t.slice(5,7), 10), 0).getDate();
+  var dl = dim - parseInt(t.slice(8,10), 10) + 1;          // jours restants, aujourd'hui compris
+  var budgetes = getEntries({ month: t.slice(0,7), type: 'depense' })
+    .filter(function(e){ return budgets[e.cat] > 0; });
+  var avant = budgetes.filter(function(e){ return e.date < t; }).reduce(function(s, e){ return s + e.amount; }, 0);
+  var auj   = budgetes.filter(function(e){ return e.date === t; }).reduce(function(s, e){ return s + e.amount; }, 0);
+  var enveloppe = (tot - avant) / dl;
+  var resteJour = enveloppe - auj;
+  var resteMois = tot - avant - auj;
   w.style.display = 'block';
   var el = document.getElementById('lite-daily-budget');
-  el.textContent = (pd >= 0 ? '' : '−') + fmt(Math.abs(pd)) + ' / jour';
-  el.style.color = pd >= 0 ? GAIN_COL : DEP_COL;
-  document.getElementById('lite-daily-detail').textContent = pd >= 0
-    ? 'Reste ' + fmt(rem) + ' sur ' + fmt(tot) + ' · ' + dl + ' jour(s)'
-    : 'Budget dépassé de ' + fmt(Math.abs(rem));
+  var det = document.getElementById('lite-daily-detail');
+  if(resteMois < 0){
+    el.textContent = 'Budget du mois dépassé';
+    el.style.color = DEP_COL;
+    det.textContent = 'De ' + fmt(-resteMois) + ' sur ' + fmt(tot);
+  } else if(resteJour < 0){
+    el.textContent = '−' + fmt(-resteJour) + ' aujourd\'hui';
+    el.style.color = DEP_COL;
+    det.textContent = 'Enveloppe du jour ' + fmt(enveloppe) + ' dépassée' + (dl > 1
+      ? ' · il reste ' + fmt(resteMois) + ' pour les ' + (dl - 1) + ' jour(s) suivants, soit ' + fmt(resteMois / (dl - 1)) + ' / jour'
+      : ' · dernier jour du mois, reste ' + fmt(resteMois));
+  } else {
+    el.textContent = fmt(resteJour);
+    el.style.color = GAIN_COL;
+    det.textContent = 'Sur une enveloppe de ' + fmt(enveloppe) + ' · reste du mois ' + fmt(resteMois) +
+      ' sur ' + fmt(tot) + ' · ' + dl + ' jour(s)';
+  }
 }
 
 /* ---------- render Pro ---------- */
@@ -2327,13 +2545,22 @@ function renderMonth(){
   var pdt = new Date(parseInt(y, 10), parseInt(m, 10) - 2, 1);
   var pp = pdt.getFullYear() + '-' + String(pdt.getMonth() + 1).padStart(2, '0');
   var pa = getEntries({ month: pp });
+  /* Mois en cours : on compare aux MEMES jours du mois precedent. Comparer 5 jours
+     de septembre a tout aout affichait « −84 % » en vert pour un rythme identique. */
+  var refLabel = MONTHS[pdt.getMonth()];
+  if(cur){
+    var pdim = new Date(pdt.getFullYear(), pdt.getMonth() + 1, 0).getDate();
+    var jmax = Math.min(dp, pdim);
+    pa = pa.filter(function(e){ return parseInt(e.date.slice(8,10), 10) <= jmax; });
+    refLabel = (jmax === 1 ? 'le 1er ' : 'le 1er–' + jmax + ' ') + MONTHS[pdt.getMonth()].toLowerCase();
+  }
   var pg = sumType(pa, 'gain'), pdd = sumType(pa, 'depense');
   var comp = '';
   if(pg + pdd > 0){
     var cp = function(v, p, l, upGood){
       if(p === 0) return '';
       var dl = ((v - p) / p) * 100, u = dl >= 0, good = upGood ? u : !u;
-      return l + ' : <b style="color:' + (good ? GAIN_COL : DEP_COL) + '">' + (u ? '+' : '') + dl.toFixed(0) + '%</b> vs ' + MONTHS[pdt.getMonth()];
+      return l + ' : <b style="color:' + (good ? GAIN_COL : DEP_COL) + '">' + (u ? '+' : '') + dl.toFixed(0) + '%</b> vs ' + refLabel;
     };
     var parts = [cp(g, pg, 'Gains', true), cp(d, pdd, 'Dépenses', false)].filter(Boolean);
     if(parts.length) comp = '<br>' + parts.join(' · ');
@@ -2395,13 +2622,6 @@ function renderYear(){
   var arr = getEntries({ year: y });
   var g = sumType(arr, 'gain'), d = sumType(arr, 'depense');
   renderMetrics('year-metrics', g, d);
-  var now = new Date();
-  var mp = now.getFullYear() === y ? now.getMonth() + 1 : 12;
-  var ag = mp > 0 ? g / mp : 0, ad = mp > 0 ? d / mp : 0;
-  document.getElementById('year-avg').innerHTML =
-    'Gain moy./mois : <b class="gain-color">' + fmt(ag) + '</b><br>' +
-    'Dépense moy./mois : <b class="dep-color">' + fmt(ad) + '</b><br>' +
-    'Solde moy./mois : <b class="' + ((ag - ad) >= 0 ? 'sol-pos' : 'sol-neg') + '">' + ((ag - ad) >= 0 ? '+' : '') + fmt(ag - ad) + '</b>';
   var mG = [], mD = [], mB = [], cum = 0;
   for(var m = 1; m <= 12; m++){
     var pre = y + '-' + String(m).padStart(2, '0');
@@ -2410,6 +2630,32 @@ function renderYear(){
     mG.push(Math.round(mg)); mD.push(Math.round(md));
     cum += mg - md; mB.push(Math.round(cum));
   }
+
+  /* Moyennes sur les mois REELLEMENT suivis. Diviser par le nombre de mois depuis
+     janvier sous-estimait tout d'un facteur 4,5 pour une app demarree en aout.
+     Le mois en cours compte au prorata des jours ecoules. */
+  var t = today();
+  var isCurY = parseInt(t.slice(0,4), 10) === y;
+  var curIdx = parseInt(t.slice(5,7), 10) - 1;
+  var fracCur = parseInt(t.slice(8,10), 10) / new Date(y, curIdx + 1, 0).getDate();
+  var firstIdx = -1, lastIdx = -1;
+  for(var k = 0; k < 12; k++){ if(mG[k] + mD[k] > 0){ if(firstIdx < 0) firstIdx = k; lastIdx = k; } }
+  var nbMois = 0;
+  if(firstIdx >= 0){
+    nbMois = (isCurY && firstIdx <= curIdx)
+      ? (curIdx - firstIdx) + fracCur
+      : (lastIdx - firstIdx) + 1;
+  }
+  var ag = nbMois > 0 ? g / nbMois : 0, ad = nbMois > 0 ? d / nbMois : 0;
+  var nbTxt = (Math.round(nbMois * 10) / 10).toLocaleString('fr-FR');
+  document.getElementById('year-avg').innerHTML = nbMois > 0
+    ? 'Gain moy./mois : <b class="gain-color">' + fmt(ag) + '</b><br>' +
+      'Dépense moy./mois : <b class="dep-color">' + fmt(ad) + '</b><br>' +
+      'Solde moy./mois : <b class="' + ((ag - ad) >= 0 ? 'sol-pos' : 'sol-neg') + '">' + ((ag - ad) >= 0 ? '+' : '') + fmt(ag - ad) + '</b>' +
+      '<div style="font-size:12px;color:var(--text-3);margin-top:4px">Sur ' + nbTxt + ' mois de suivi (depuis ' +
+        MONTHS[firstIdx].toLowerCase() + ')</div>'
+    : '<div class="empty">Aucune donnée cette année</div>';
+
   if(typeof Chart !== 'undefined'){
     if(charts.year){ charts.year.destroy(); }
     charts.year = new Chart(document.getElementById('year-chart'), {
@@ -2428,16 +2674,27 @@ function renderYear(){
         scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { callback: function(v){ return fmtShort(v); }, font: { size: 10 } } } } }
     });
   }
-  var rec = mG.map(function(x, i){ return { g: x, d: mD[i] }; }).filter(function(x){ return x.g + x.d > 0; }).slice(-3);
+  /* La prevision ne retient que des mois termines : le mois en cours, forcement
+     incomplet, tirait la moyenne vers le bas. S'il est le seul a avoir des donnees,
+     on l'extrapole au prorata des jours ecoules, et on le dit. */
+  var rec = [], extrapole = false;
+  for(var k2 = 0; k2 < 12; k2++){
+    if(mG[k2] + mD[k2] <= 0) continue;
+    if(isCurY && k2 >= curIdx) continue;
+    rec.push({ g: mG[k2], d: mD[k2] });
+  }
+  rec = rec.slice(-3);
+  if(!rec.length && isCurY && mG[curIdx] + mD[curIdx] > 0){
+    rec = [{ g: mG[curIdx] / fracCur, d: mD[curIdx] / fracCur }];
+    extrapole = true;
+  }
   if(rec.length){
     var aG = rec.reduce(function(s, x){ return s + x.g; }, 0) / rec.length;
     var aD = rec.reduce(function(s, x){ return s + x.d; }, 0) / rec.length;
     /* Les mois projetés partaient toujours de la date du jour : consulter 2024 annonçait
        une prévision pour 2026. On repart du dernier mois avec données de l'année affichée. */
-    var isCur = now.getFullYear() === y;
-    var lastIdx = -1;
-    for(var k = 0; k < 12; k++){ if(mG[k] + mD[k] > 0) lastIdx = k; }
-    var baseM = isCur ? now.getMonth() : lastIdx;
+    var isCur = isCurY;
+    var baseM = isCur ? curIdx : lastIdx;
     var fc = [];
     for(var i = 0; i < 3; i++){
       var off = baseM + 1 + i;
@@ -2446,7 +2703,10 @@ function renderYear(){
       fc.push('<b>' + MONTHS[mm] + ' ' + yr + '</b> : ~' + fmtShort(aG) + ' | ~' + fmtShort(aD) +
         ' | <span class="' + ((aG - aD) >= 0 ? 'sol-pos' : 'sol-neg') + '">' + ((aG - aD) >= 0 ? '+' : '') + fmtShort(aG - aD) + '</span>');
     }
-    document.getElementById('forecast').innerHTML = '<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">Moyenne des ' + rec.length + ' derniers mois avec données' + (isCur ? '' : ' — projection théorique à partir de ' + y) + '</div>' + fc.join('<br>');
+    var base = extrapole
+      ? 'Extrapolé à partir de ' + MONTHS[curIdx].toLowerCase() + ' en cours (' + Math.round(fracCur * 100) + ' % du mois écoulé) — à prendre avec prudence'
+      : 'Moyenne des ' + rec.length + ' dernier(s) mois terminé(s)' + (isCur ? '' : ' — projection théorique à partir de ' + y);
+    document.getElementById('forecast').innerHTML = '<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">' + base + '</div>' + fc.join('<br>');
   } else {
     document.getElementById('forecast').innerHTML = '<div class="empty">Pas assez de données</div>';
   }
@@ -2521,7 +2781,7 @@ function exportCSV(){
 }
 function backupBlob(){
   var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned,
-            learnedCats: learnedCats, exported_at: new Date().toISOString() };
+            learnedCats: learnedCats, checkpoints: checkpoints, exported_at: new Date().toISOString() };
   return new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
 }
 function backupName(){ return 'finances_backup_' + today() + '.json'; }
@@ -2689,10 +2949,18 @@ function importJSON(ev){
         var LC = sanitizeLearned(d.learnedCats);
         if(rep) learnedCats = LC;
         else Object.keys(LC).forEach(function(k){ learnedCats[k] = LC[k]; });
+        /* Pointages : remplaces, ou fusionnes sans doublon (la marque est unique). */
+        var CP = sanitizeCheckpoints(d.checkpoints);
+        if(rep) checkpoints = CP;
+        else {
+          var marks = {}; checkpoints.forEach(function(c){ marks[c.mark] = 1; });
+          CP.forEach(function(c){ if(!marks[c.mark]) checkpoints.push(c); });
+          checkpoints.sort(function(a, b){ return a.mark - b.mark; });
+        }
         entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
         planned.sort(function(a, b){ return a.date.localeCompare(b.date); });
         syncIdCounter();
-        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned()]).then(function(){
+        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints()]).then(function(){
           msg.style.color = GAIN_COL;
           msg.textContent = '✓ Restauré — ' + entries.length + ' entrée(s), ' + planned.length + ' prévision(s).';
           renderAll();
@@ -2809,15 +3077,15 @@ function clearEntriesOnly(){
   });
 }
 function confirmClearAll(){
-  uiConfirm('⚠️ <b>REMISE À ZÉRO COMPLÈTE</b>\n\nEntrées, budgets, prévisions et raccourcis seront effacés.', 'Continuer').then(function(ok){
+  uiConfirm('⚠️ <b>REMISE À ZÉRO COMPLÈTE</b>\n\nEntrées, budgets, prévisions, pointages et raccourcis seront effacés.', 'Continuer').then(function(ok){
     if(!ok) return null;
     return uiPrompt('Pour confirmer, tape <b>EFFACER</b> :', '');
   }).then(function(code){
     if(code === null || code === undefined) return;
     if(String(code).trim().toUpperCase() !== 'EFFACER'){ delMsg('Annulé (code incorrect).', false); return; }
-    entries = []; budgets = {}; planned = [];
+    entries = []; budgets = {}; planned = []; checkpoints = [];
     shortcuts = ['Bière -650','Unités -1000','Carburant -10000','Taxi -2000'];
-    return Promise.all([save(), saveBudgets(), savePlanned(), saveShortcuts()]).then(function(){
+    return Promise.all([save(), saveBudgets(), savePlanned(), saveShortcuts(), saveCheckpoints()]).then(function(){
       renderAll(); delMsg('Toutes les données effacées.', true);
     });
   });
@@ -2852,7 +3120,7 @@ function renderCurrentProTab(){
   else if(id === 'mois') renderMonth();
   else if(id === 'annee') renderYear();
   else if(id === 'budgets') renderBudgets();
-  else if(id === 'export'){ renderRepair(); renderLearned(); renderHist(); }
+  else if(id === 'export'){ renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
 }
 function populateSelects(){
   var now = new Date(), cy = now.getFullYear();
