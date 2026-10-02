@@ -1,7 +1,8 @@
 /* Service worker — rend l'application utilisable sans connexion.
    Pour publier une mise à jour, incrémente CACHE ci-dessous (finances-v2, v3...)
    ET APP_VERSION dans index.html : les deux doivent rester d'accord. */
-var CACHE = 'finances-v12';
+var CACHE = 'finances-v13';
+var NET_TIMEOUT_MS = 2000;   // au-dela, la page s'ouvre depuis le cache
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 /* addAll() passait par le cache HTTP du navigateur : GitHub Pages sert index.html
@@ -35,21 +36,43 @@ self.addEventListener('fetch', function(e){
   /* La page elle-meme : reseau d'abord, cache en secours. C'est ce qui fait
      qu'une mise a jour publiee arrive des la prochaine ouverture au lieu
      d'attendre un changement de version du service worker. */
+  /* Mais sans limite de temps, une connexion qui accroche sans rien faire passer
+     (frequent en donnees mobiles) laissait l'ecran blanc jusqu'a l'abandon du
+     navigateur : le cache ne servait qu'en cas d'echec franc. Au-dela de
+     NET_TIMEOUT_MS on affiche donc la copie en cache, et le reseau continue en
+     arriere-plan pour la mettre a jour — la nouvelle version arrive alors a
+     l'ouverture suivante. Sans copie en cache (tout premier lancement), on
+     attend le reseau, faute de mieux. */
   var accept = e.request.headers.get('accept') || '';
   if(e.request.mode === 'navigate' || accept.indexOf('text/html') !== -1){
-    e.respondWith(
-      fetch(e.request).then(function(res){
-        if(res && res.ok){
-          var copy = res.clone();
-          caches.open(CACHE).then(function(c){ c.put('./index.html', copy); });
-        }
-        return res;
-      }).catch(function(){
-        return caches.match('./index.html').then(function(hit){
-          return hit || caches.match('./');
-        });
-      })
-    );
+    var fromCache = function(){
+      return caches.match('./index.html').then(function(hit){ return hit || caches.match('./'); });
+    };
+    var network = fetch(e.request).then(function(res){
+      if(res && res.ok){
+        var copy = res.clone();
+        return caches.open(CACHE).then(function(c){ return c.put('./index.html', copy); })
+          .then(function(){ return res; }, function(){ return res; });
+      }
+      return res;
+    });
+    /* Garde le service worker en vie jusqu'a la fin de la mise a jour du cache,
+       meme quand la page a deja ete servie depuis le cache. */
+    e.waitUntil(network.catch(function(){}));
+    e.respondWith(new Promise(function(resolve){
+      var done = false;
+      var finish = function(r){ if(!done && r){ done = true; resolve(r); } };
+      var timer = setTimeout(function(){ fromCache().then(finish); }, NET_TIMEOUT_MS);
+      network.then(function(res){
+        clearTimeout(timer);
+        /* Une erreur serveur (404, 500…) ne doit pas remplacer une page qui marche. */
+        if(res && res.ok) return finish(res);
+        return fromCache().then(function(hit){ finish(hit || res); });
+      }, function(){
+        clearTimeout(timer);
+        return fromCache().then(function(hit){ finish(hit || Response.error()); });
+      });
+    }));
     return;
   }
 

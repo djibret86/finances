@@ -396,6 +396,17 @@ details[open] summary::after{transform:rotate(-135deg)}
   box-shadow:0 0 0 1.5px var(--warn-line) inset;
 }
 
+/* ---------- Bilan mensuel ------------------------------- */
+.bilan-line{
+  display:flex;gap:10px;align-items:flex-start;
+  padding:10px 0;border-bottom:1px solid var(--line-soft);
+  font-size:14px;line-height:1.45;
+}
+.bilan-line:last-child{border-bottom:none}
+.bilan-ico{flex:0 0 22px;text-align:center}
+.bilan-txt{flex:1;min-width:0}
+.bilan-sub{font-size:12px;color:var(--text-3);margin-top:2px}
+
 /* ---------- Barre de stockage --------------------------- */
 #storage-bar{
   display:none;padding:13px 15px;margin-bottom:12px;
@@ -511,8 +522,9 @@ details[open] summary::after{transform:rotate(-135deg)}
     <div id="modal-input-wrap" style="display:none;margin-bottom:14px">
       <input type="text" id="modal-input">
     </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
       <button class="btn btn-sm" id="modal-cancel">Annuler</button>
+      <button class="btn btn-sm" id="modal-alt" style="display:none"></button>
       <button class="btn btn-primary btn-sm" id="modal-ok">Confirmer</button>
     </div>
   </div>
@@ -534,6 +546,15 @@ details[open] summary::after{transform:rotate(-135deg)}
 </div>
 
 <div id="mode-lite">
+  <!-- Bilan du mois ecoule : affiche du 1er du mois jusqu'a ce qu'on le ferme. -->
+  <div class="card" id="bilan-card" style="display:none">
+    <div id="bilan-body"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-sm" onclick="openBilanMonth()" style="flex:1">Voir le détail</button>
+      <button class="btn btn-primary btn-sm" onclick="dismissBilan()" style="flex:1">J'ai vu</button>
+    </div>
+  </div>
+
   <div class="card card-flat lite-balance">
     <div class="lite-date" id="lite-date"></div>
     <div class="lite-solde" id="lite-solde">0 F</div>
@@ -734,6 +755,7 @@ details[open] summary::after{transform:rotate(-135deg)}
     <div class="card">
       <div class="section-title">Moyennes</div>
       <div id="month-avg" style="font-size:13px;line-height:1.6"></div>
+      <button class="btn btn-sm" id="month-bilan-btn" onclick="showBilan(currentMonthKey())" style="width:100%;margin-top:12px;display:none">📊 Bilan de ce mois</button>
     </div>
     <div class="card">
       <div class="section-title">Répartition des dépenses</div>
@@ -939,7 +961,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v12';
+var APP_VERSION = 'v13';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1187,6 +1209,9 @@ function load(){
     return storageGet('budget_checkpoints');
   }).then(function(r){
     if(r && r.value){ try { checkpoints = sanitizeCheckpoints(JSON.parse(r.value)); } catch(e){} }
+    return storageGet('budget_bilan_vu');
+  }).then(function(r){
+    if(r && r.value) bilanVu = r.value;
     setStorageStatus(true);
   });
 }
@@ -1609,6 +1634,24 @@ function getEntries(f){
     return true;
   });
 }
+/* Date decroissante, puis la plus recente saisie d'abord a l'interieur d'une meme
+   journee (l'id encode l'instant de creation, cf. nextId). Le tri par date seule
+   etait stable : la derniere saisie du jour tombait EN BAS de la liste, la ou on
+   ne la cherche pas pour la verifier ou l'annuler. */
+function sortEntries(){
+  entries.sort(function(a, b){ return b.date.localeCompare(a.date) || ((b.id || 0) - (a.id || 0)); });
+}
+/* « aujourd'hui », « hier », « demain », sinon « lun. 28/09 » (+ annee si autre annee). */
+function fmtDateRel(d){
+  if(!d) return '';
+  var t = today();
+  if(d === t) return 'aujourd\'hui';
+  if(d === addDays(t, -1)) return 'hier';
+  if(d === addDays(t, 1)) return 'demain';
+  var x = new Date(d + 'T12:00');
+  var s = x.toLocaleDateString('fr-FR', { weekday: 'short' }) + ' ' + d.slice(8,10) + '/' + d.slice(5,7);
+  return d.slice(0,4) === t.slice(0,4) ? s : s + '/' + d.slice(0,4);
+}
 function sumType(arr, t){
   return arr.filter(function(e){ return e.type === t; }).reduce(function(s, e){ return s + e.amount; }, 0);
 }
@@ -1622,11 +1665,13 @@ function catBreakdown(arr, t){
 
 /* ---------- render helpers ---------- */
 function renderMetrics(id, g, d){
-  var s = g - d;
   var el = document.getElementById(id);
   if(!el) return;
-  el.innerHTML =
-    '<div class="metric metric-gain"><div class="metric-label">Gains</div><div class="metric-value">' + fmtShort(g) + '</div></div>' +
+  el.innerHTML = metricsHTML(g, d);
+}
+function metricsHTML(g, d){
+  var s = g - d;
+  return '<div class="metric metric-gain"><div class="metric-label">Gains</div><div class="metric-value">' + fmtShort(g) + '</div></div>' +
     '<div class="metric metric-dep"><div class="metric-label">Dépenses</div><div class="metric-value">' + fmtShort(d) + '</div></div>' +
     '<div class="metric metric-sol ' + (s < 0 ? 'neg' : '') + '"><div class="metric-label">Solde</div><div class="metric-value">' + (s >= 0 ? '+' : '') + fmtShort(s) + '</div></div>';
 }
@@ -1639,7 +1684,7 @@ function renderEntryList(id, arr){
       '<div class="entry-meta">' +
         '<span class="badge ' + (e.type === 'gain' ? 'badge-gain' : 'badge-dep') + '">' + (e.type === 'gain' ? 'GAIN' : 'DÉP') + '</span>' +
         '<span style="font-size:13px">' + (CAT_ICONS[e.cat] || '') + ' ' + esc(e.cat) + (e.desc ? ' · ' + esc(e.desc) : '') + '</span>' +
-        '<div class="entry-cat">' + e.date + '</div>' +
+        '<div class="entry-cat">' + fmtDateRel(e.date) + '</div>' +
       '</div>' +
       '<span class="entry-amount ' + (e.type === 'gain' ? 'gain-color' : 'dep-color') + '" title="' + fmt(e.amount) + '">' + (e.type === 'gain' ? '+' : '-') + fmtShort(e.amount) + '</span>' +
       '<button class="btn btn-sm" onclick="openEdit(' + e.id + ')">✎</button>' +
@@ -1756,6 +1801,26 @@ function renderDonut(cid, key, bd){
 function closeModal(){
   var m = document.getElementById('app-modal');
   if(m) m.style.display = 'none';
+  /* Le troisieme bouton n'appartient qu'a uiChoice : on le range a chaque
+     fermeture pour qu'il ne reapparaisse pas dans le dialogue suivant. */
+  var alt = document.getElementById('modal-alt');
+  if(alt){ alt.style.display = 'none'; alt.onclick = null; }
+}
+/* Trois issues : 'ok', 'alt' ou 'cancel'. */
+function uiChoice(message, okLabel, altLabel, cancelLabel){
+  return new Promise(function(resolve){
+    var m = document.getElementById('app-modal');
+    document.getElementById('modal-text').innerHTML = String(message).replace(/\n/g, '<br>');
+    document.getElementById('modal-input-wrap').style.display = 'none';
+    var ok = document.getElementById('modal-ok'), alt = document.getElementById('modal-alt'),
+        cancel = document.getElementById('modal-cancel');
+    ok.textContent = okLabel; alt.textContent = altLabel; cancel.textContent = cancelLabel;
+    cancel.style.display = ''; alt.style.display = '';
+    ok.onclick = function(){ closeModal(); resolve('ok'); };
+    alt.onclick = function(){ closeModal(); resolve('alt'); };
+    cancel.onclick = function(){ closeModal(); resolve('cancel'); };
+    m.style.display = 'flex';
+  });
 }
 function uiConfirm(message, okLabel, cancelLabel){
   return new Promise(function(resolve){
@@ -1815,7 +1880,7 @@ function confirmIfOddAsync(amount, date, label){
 function confirmDelete(id){
   var e = entries.filter(function(x){ return x.id === id; })[0];
   if(!e) return;
-  uiConfirm('Supprimer cette entrée ?\n\n<b>' + esc(e.desc || e.cat) + '</b><br>' + (e.type === 'gain' ? '+' : '-') + fmt(e.amount) + ' · ' + e.date, 'Supprimer').then(function(ok){
+  uiConfirm('Supprimer cette entrée ?\n\n<b>' + esc(e.desc || e.cat) + '</b><br>' + (e.type === 'gain' ? '+' : '-') + fmt(e.amount) + ' · ' + fmtDateRel(e.date), 'Supprimer').then(function(ok){
     if(ok) deleteEntry(id);
   });
 }
@@ -1869,7 +1934,7 @@ function saveEdit(){
   var apprentissage = (e.cat !== ancienneCat)
     ? learnCat(e.desc, e.type, e.cat)
     : Promise.resolve(null);
-  entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+  sortEntries();
   editingId = null;
   Promise.all([save(), apprentissage]).then(renderAll);
 }
@@ -1948,10 +2013,12 @@ function pushCheckpoint(cp){
   if(checkpoints.length > MAX_CHECKPOINTS) checkpoints = checkpoints.slice(-MAX_CHECKPOINTS);
   return saveCheckpoints().then(renderAll);
 }
-function startCheckpoint(){
+/* prefill : montant deja tape, repropose quand l'utilisateur choisit « Corriger ». */
+function startCheckpoint(prefill){
   var est = estimatedBalance();
   uiPrompt('<b>⚖️ Pointer ton solde réel</b><br>Additionne tout ce que tu as maintenant : liquide, Wave, Orange Money, banque.' +
-    (est !== null ? '<br><span style="font-size:12px;color:var(--text-3)">L\'app estime ' + fmt(est) + '.</span>' : ''), '', true)
+    (est !== null ? '<br><span style="font-size:12px;color:var(--text-3)">L\'app estime ' + fmt(est) + '.</span>' : ''),
+    prefill == null ? '' : prefill, true)
   .then(function(raw){
     if(raw === null) return;
     var digits = String(raw).replace(/[^\d]/g, '');
@@ -1961,10 +2028,16 @@ function startCheckpoint(){
 }
 function recordCheckpoint(real){
   var t = today(), prev = lastCheckpoint();
+  /* Aucune sortie n'existait pour une faute de frappe : 15 000 tape pour 150 000
+     etait enregistre quand meme, a supprimer ensuite dans l'onglet Export. On
+     confirme donc le montant, avec un retour a la saisie. */
   if(!prev){
-    return pushCheckpoint({ date: t, real: real, ecart: null, recorded: false }).then(function(){
-      return uiAlert('✅ <b>Point de départ : ' + fmt(real) + '</b><br><br>Le solde affiché suit désormais ton argent réel. ' +
-        'Au prochain pointage, l\'app te dira combien a échappé à la saisie.');
+    return uiConfirm('Point de départ : <b>' + fmt(real) + '</b> ?', 'Confirmer', 'Corriger').then(function(ok){
+      if(!ok) return startCheckpoint(real);
+      return pushCheckpoint({ date: t, real: real, ecart: null, recorded: false }).then(function(){
+        return uiAlert('✅ <b>Point de départ : ' + fmt(real) + '</b><br><br>Le solde affiché suit désormais ton argent réel. ' +
+          'Au prochain pointage, l\'app te dira combien a échappé à la saisie.');
+      });
     });
   }
   var attendu = prev.real + sinceCheckpoint(prev);
@@ -1975,19 +2048,21 @@ function recordCheckpoint(real){
     });
   }
   var perte = ecart < 0;
-  return uiConfirm('Attendu : <b>' + fmt(attendu) + '</b><br>Réel : <b>' + fmt(real) + '</b><br><br>' +
+  return uiChoice('Attendu : <b>' + fmt(attendu) + '</b><br>Réel : <b>' + fmt(real) + '</b><br><br>' +
       '<b style="color:var(--' + (perte ? 'dep' : 'gain') + '-strong)">Écart : ' + (perte ? '−' : '+') + fmt(Math.abs(ecart)) + '</b> — ' +
       (perte ? 'des dépenses' : 'des rentrées') + ' non saisies depuis le ' + fmtDateFR(prev.date) + '.<br><br>' +
       'L\'enregistrer comme ' + (perte ? 'dépense' : 'gain') + ' « Écart de pointage » ?' +
       '<br><span style="font-size:12px;color:var(--text-3)">Sinon l\'écart reste hors des statistiques, mais le solde est recalé quand même.</span>',
-      'Enregistrer l\'écart', 'Laisser tel quel')
-  .then(function(rec){
+      'Enregistrer l\'écart', 'Laisser tel quel', 'Corriger le montant')
+  .then(function(choix){
+    if(choix === 'cancel') return startCheckpoint(real);
+    var rec = choix === 'ok';
     /* L'entree d'ecart est creee AVANT le nouveau pointage : son id reste donc
        sous la nouvelle marque, et elle n'est pas recomptee dans l'estimation. */
     var avant = rec ? (function(){
       entries.push({ id: nextId(), date: t, type: perte ? 'depense' : 'gain', cat: 'Autre',
                      amount: Math.abs(ecart), desc: 'Écart de pointage' });
-      entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+      sortEntries();
       return save();
     })() : Promise.resolve();
     return avant.then(function(){
@@ -2047,6 +2122,7 @@ function checkBudgetAlert(en){
   return '';
 }
 function saveHero(inpId, msgId, prevId){
+  checkDayChange();   // jamais enregistrer sur un « aujourd'hui » perime
   var inp = document.getElementById(inpId), msg = document.getElementById(msgId);
   var base = (mode === 'lite') ? today() : ((document.getElementById('f-date') || {}).value || today());
   var p = parseEntryLine(inp.value, base);
@@ -2056,7 +2132,7 @@ function saveHero(inpId, msgId, prevId){
     if(!ok) return;
     var nid = nextId();
     entries.push({ id: nid, date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
-    entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+    sortEntries();
     return save().then(function(){
       var al = checkBudgetAlert({ type: p.type, cat: p.cat, date: date });
       offerUndo(msg, esc('✓ ' + p.desc + ' — ' + p.cat + ' : ' + (p.type === 'gain' ? '+' : '-') + fmt(p.amount) + dateSuffix(date) + al),
@@ -2069,6 +2145,7 @@ function saveHero(inpId, msgId, prevId){
   });
 }
 function saveQuick(){
+  checkDayChange();
   var lines = document.getElementById('quick-input').value.split('\n');
   var msg = document.getElementById('quick-msg');
   var base = document.getElementById('f-date').value || today();
@@ -2091,7 +2168,7 @@ function saveQuick(){
       nids.push(nid);
       entries.push({ id: nid, date: p.date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
     });
-    entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+    sortEntries();
     return save().then(function(){
       document.getElementById('quick-input').value = '';
       document.getElementById('quick-preview').textContent = '';
@@ -2108,7 +2185,7 @@ function updateDateFlag(){
   if(!el || !flag) return;
   if(el.value && el.value !== today()){
     flag.style.display = 'block';
-    flag.innerHTML = '📅 Saisies datées du <b>' + esc(el.value) + '</b>, pas aujourd\'hui. ' +
+    flag.innerHTML = '📅 Saisies datées <b>' + esc(fmtDateRel(el.value)) + '</b>, pas aujourd\'hui. ' +
       '<button class="btn btn-sm" onclick="resetDate()" style="margin-left:4px">Revenir à aujourd\'hui</button>';
   } else {
     flag.style.display = 'none';
@@ -2129,6 +2206,7 @@ function clearForm(){
   document.getElementById('f-msg').textContent = '';
 }
 function saveEntry(){
+  checkDayChange();
   var date = document.getElementById('f-date').value;
   var type = document.getElementById('f-type').value;
   var cat = document.getElementById('f-cat').value;
@@ -2141,7 +2219,7 @@ function saveEntry(){
     if(!ok) return;
     var nid = nextId();
     entries.push({ id: nid, date: date, type: type, cat: cat, amount: amount, desc: desc });
-    entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+    sortEntries();
     return save().then(function(){
       /* clearForm() vide aussi #f-msg : l'appeler APRES le message l'effacait aussitot,
          et « Enregistré ✓ » n'etait jamais visible. */
@@ -2213,7 +2291,7 @@ function renderPlanned(){
       '<div class="planned-meta">' +
         '<span class="badge ' + (p.type === 'gain' ? 'badge-gain' : 'badge-dep') + '">' + (p.type === 'gain' ? 'GAIN' : 'DÉP') + '</span>' +
         '<span style="font-size:13px">' + (CAT_ICONS[p.cat] || '') + ' ' + esc(p.cat) + (p.desc ? ' · ' + esc(p.desc) : '') + '</span>' +
-        '<div class="planned-date">Prévu le ' + p.date + (isDue ? ' — échu' : '') + '</div>' +
+        '<div class="planned-date">Prévu ' + fmtDateRel(p.date) + (isDue ? ' — échu' : '') + '</div>' +
       '</div>' +
       '<span class="entry-amount ' + (p.type === 'gain' ? 'gain-color' : 'dep-color') + '">' + (p.type === 'gain' ? '+' : '-') + fmtShort(p.amount) + '</span>' +
       '<div class="planned-actions">' +
@@ -2266,7 +2344,7 @@ function renderPlannedChart(){
       (overdue.length ? '<span style="color:var(--warn)">' + overdue.length + ' échue(s) intégrée(s) (net ' + (overdueNet >= 0 ? '+' : '') + fmt(overdueNet) + ')</span><br>' : '') +
       'Gains prévus : <b class="gain-color">+' + fmt(g) + '</b> · Dépenses : <b class="dep-color">−' + fmt(d) + '</b><br>' +
       'Solde projeté final : <b class="' + (fin >= 0 ? 'sol-pos' : 'sol-neg') + '">' + (fin >= 0 ? '+' : '') + fmt(fin) + '</b>' +
-      (minV < 0 ? '<div class="alert alert-danger" style="margin-top:10px">⚠️ Passage en négatif le ' + (minD || '—') + ' — creux à ' + fmt(minV) + '</div>' : '');
+      (minV < 0 ? '<div class="alert alert-danger" style="margin-top:10px">⚠️ Passage en négatif ' + (minD ? fmtDateRel(minD) : '—') + ' — creux à ' + fmt(minV) + '</div>' : '');
   }
 }
 function openEditPlanned(id){
@@ -2322,7 +2400,7 @@ function validatePlanned(id){
     return confirmIfOddAsync(amount, p.date, (p.desc || p.cat) + ' — ' + p.cat).then(function(ok){
       if(!ok) return;
       entries.push({ id: nextId(), date: p.date, type: p.type, cat: p.cat, amount: amount, desc: p.desc });
-      entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+      sortEntries();
       planned = planned.filter(function(x){ return x.id !== id; });
       return Promise.all([save(), savePlanned()]).then(renderAll);
     });
@@ -2339,7 +2417,7 @@ function validateAllDue(){
       entries.push({ id: nextId(), date: p.date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
     });
     planned = planned.filter(function(p){ return p.date > t; });
-    entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+    sortEntries();
     return Promise.all([save(), savePlanned()]).then(renderAll);
   });
 }
@@ -2370,6 +2448,7 @@ function renderShortcuts(){
 }
 function toggleShortcutEdit(){ shortcutEditMode = !shortcutEditMode; renderShortcuts(); }
 function useShortcut(i){
+  checkDayChange();
   var p = parseQuickLine(shortcuts[i]);
   if(!p) return;
   var date = (mode === 'lite') ? today() : ((document.getElementById('f-date') || {}).value || today());
@@ -2377,7 +2456,7 @@ function useShortcut(i){
     if(!ok) return;
     var nid = nextId();
     entries.push({ id: nid, date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
-    entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+    sortEntries();
     return save().then(function(){
       var msg = document.getElementById(mode === 'lite' ? 'hero-msg' : 'hero-msg-pro');
       var al = checkBudgetAlert({ type: p.type, cat: p.cat, date: date });
@@ -2407,6 +2486,7 @@ function removeShortcut(i){
 /* ---------- render Lite ---------- */
 function renderLite(){
   var t = today();
+  renderBilanCard();
   document.getElementById('lite-date').textContent = new Date(t + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   var arr = getEntries({ date: t });
   var g = sumType(arr, 'gain'), d = sumType(arr, 'depense'), sol = g - d;
@@ -2502,6 +2582,178 @@ function renderLiteBudgetWidget(){
   }
 }
 
+/* ---------- bilan du mois ecoule ----------
+   Au 1er du mois, une carte resume le mois precedent : c'est le moment ou l'on
+   prend du recul. Elle reste affichee jusqu'a « J'ai vu » (cle budget_bilan_vu =
+   le mois deja vu) et se rouvre a tout moment depuis l'onglet Mois.
+
+   Les comparaisons se font en montant PAR JOUR SUIVI : l'app a demarre le 12 aout,
+   et comparer septembre entier a 20 jours d'aout aurait gonfle toutes les hausses. */
+var bilanVu = null;
+function prevMonthKey(ym){
+  var y = parseInt(ym.slice(0,4), 10), m = parseInt(ym.slice(5,7), 10) - 1;
+  if(m === 0){ y--; m = 12; }
+  return y + '-' + String(m).padStart(2, '0');
+}
+function monthLabel(ym){ return MONTHS[parseInt(ym.slice(5,7), 10) - 1].toLowerCase() + ' ' + ym.slice(0,4); }
+/* « de septembre », mais « d'avril », « d'août », « d'octobre ». */
+function deMois(ym){ var l = monthLabel(ym); return (/^[aeiouéèêâ]/i.test(l) ? 'd\'' : 'de ') + l; }
+function daysInMonthKey(ym){ return new Date(parseInt(ym.slice(0,4), 10), parseInt(ym.slice(5,7), 10), 0).getDate(); }
+/* Jours reellement suivis dans un mois : depuis la toute premiere saisie, et pas
+   au-dela d'aujourd'hui. Les ecarts de pointage ne comptent pas comme un debut de suivi. */
+function trackedDays(ym){
+  var first = entries.reduce(function(m, e){
+    return (e.desc !== 'Écart de pointage' && (!m || e.date < m)) ? e.date : m;
+  }, null);
+  if(!first) return { days: 0, from: null };
+  var start = ym + '-01', end = ym + '-' + String(daysInMonthKey(ym)).padStart(2, '0');
+  var t = today();
+  if(end > t) end = t;
+  if(first > start) start = first;
+  if(start > end) return { days: 0, from: null };
+  return { days: daysBetween(start, end) + 1, from: start };
+}
+function bilanData(P){
+  var arr = getEntries({ month: P });
+  var Q = prevMonthKey(P), arrQ = getEntries({ month: Q });
+  var tP = trackedDays(P), tQ = trackedDays(Q), dimP = daysInMonthKey(P);
+  var g = sumType(arr, 'gain'), d = sumType(arr, 'depense');
+
+  /* Comparaison au mois precedent, si celui-ci a au moins une semaine de suivi. */
+  var dQ = sumType(arrQ, 'depense');
+  var comp = null;
+  if(tP.days && tQ.days >= 7 && dQ > 0){
+    comp = { pct: ((d / tP.days) - (dQ / tQ.days)) / (dQ / tQ.days) * 100,
+             partielQ: tQ.days < daysInMonthKey(Q), fromQ: tQ.from };
+  }
+
+  /* Categories : les trois plus lourdes, et les deux plus fortes hausses (au moins
+     +15 % et +5 000 F ramenes a un mois complet, pour ignorer le bruit). */
+  var cats = catBreakdown(arr, 'depense');
+  var hausses = [];
+  if(comp){
+    var cq = {};
+    catBreakdown(arrQ, 'depense').forEach(function(x){ cq[x[0]] = x[1]; });
+    cats.forEach(function(x){
+      var jP = x[1] / tP.days, jQ = (cq[x[0]] || 0) / tQ.days;
+      var delta = (jP - jQ) * dimP;
+      if(delta >= 5000 && (jQ === 0 || jP / jQ - 1 >= 0.15)) hausses.push({ cat: x[0], delta: delta, neuf: jQ === 0 });
+    });
+    hausses.sort(function(a, b){ return b.delta - a.delta; });
+    hausses = hausses.slice(0, 2);
+  }
+
+  var depasses = [];
+  CATS.depense.forEach(function(c){
+    var b = budgets[c];
+    if(!(b > 0)) return;
+    var s = sumType(arr.filter(function(e){ return e.cat === c; }), 'depense');
+    if(s > b) depasses.push({ cat: c, spent: s, budget: b });
+  });
+
+  var pts = checkpoints.filter(function(c){ return c.date.slice(0,7) === P && typeof c.ecart === 'number'; });
+  var ecart = pts.reduce(function(s, c){ return s + c.ecart; }, 0);
+
+  var big = arr.filter(function(e){ return e.type === 'depense' && e.desc !== 'Écart de pointage'; })
+               .sort(function(a, b){ return b.amount - a.amount; })[0] || null;
+  var jours = {};
+  arr.forEach(function(e){ if(e.desc !== 'Écart de pointage') jours[e.date] = 1; });
+
+  return { P: P, Q: Q, g: g, d: d, n: arr.length, tracked: tP, dim: dimP, comp: comp, top: cats.slice(0, 3),
+           hausses: hausses, depasses: depasses, pointages: pts.length, ecart: ecart, big: big,
+           joursSaisis: Object.keys(jours).length };
+}
+function bilanLine(ico, html, sub){
+  return '<div class="bilan-line"><div class="bilan-ico">' + ico + '</div><div class="bilan-txt">' + html +
+    (sub ? '<div class="bilan-sub">' + sub + '</div>' : '') + '</div></div>';
+}
+function bilanHTML(P){
+  var b = bilanData(P);
+  var h = '<div class="section-title" style="margin-bottom:10px">📊 Bilan ' + deMois(P) + '</div>' +
+          '<div class="metric-grid">' + metricsHTML(b.g, b.d) + '</div>';
+  if(b.tracked.days && b.tracked.days < b.dim){
+    h += '<div class="bilan-sub" style="margin:-4px 0 6px">Mois suivi à partir du ' + fmtDateFR(b.tracked.from) +
+         ' : chiffres sur ' + b.tracked.days + ' jours.</div>';
+  }
+  var L = '';
+  if(b.g > 0){
+    var taux = (b.g - b.d) / b.g * 100;
+    L += taux >= 0
+      ? bilanLine('💰', 'Tu as mis de côté <b class="gain-color">' + taux.toFixed(0) + ' %</b> de tes gains.')
+      : bilanLine('💰', 'Tes dépenses ont dépassé tes gains de <b class="dep-color">' + fmt(b.d - b.g) + '</b>.');
+  }
+  if(b.comp){
+    var up = b.comp.pct >= 0;
+    L += bilanLine(up ? '📈' : '📉',
+      'Dépenses <b class="' + (up ? 'dep-color' : 'gain-color') + '">' + (up ? '+' : '−') + Math.abs(b.comp.pct).toFixed(0) +
+      ' %</b> par rapport à ' + MONTHS[parseInt(b.Q.slice(5,7), 10) - 1].toLowerCase(),
+      'Comparé au jour près' + (b.comp.partielQ ? ' — ' + MONTHS[parseInt(b.Q.slice(5,7), 10) - 1].toLowerCase() +
+        ' suivi à partir du ' + fmtDateFR(b.comp.fromQ) : ''));
+  }
+  if(b.top.length){
+    L += bilanLine('🏷️', 'Postes principaux : ' + b.top.map(function(x){
+      return (CAT_ICONS[x[0]] || '') + ' ' + esc(x[0]) + ' <b>' + (b.d ? (x[1] / b.d * 100).toFixed(0) : 0) + ' %</b>';
+    }).join(' · '));
+  }
+  if(b.hausses.length){
+    L += bilanLine('⬆️', 'En hausse : ' + b.hausses.map(function(x){
+      return (CAT_ICONS[x.cat] || '') + ' ' + esc(x.cat) + ' <b class="dep-color">+' + fmtShort(x.delta) + '</b>' + (x.neuf ? ' (nouveau)' : '');
+    }).join(' · '), 'Ramené à un mois complet');
+  }
+  if(b.depasses.length){
+    L += bilanLine('🚨', 'Budget dépassé : ' + b.depasses.map(function(x){
+      return esc(x.cat) + ' <b class="dep-color">' + fmtShort(x.spent) + '</b> / ' + fmtShort(x.budget);
+    }).join(' · '));
+  }
+  if(b.pointages){
+    L += b.ecart === 0
+      ? bilanLine('⚖️', 'Pointages : <b class="gain-color">tout était saisi</b>.')
+      : bilanLine('⚖️', 'Écarts de pointage : <b class="' + (b.ecart < 0 ? 'dep-color' : 'gain-color') + '">' +
+          (b.ecart < 0 ? '−' : '+') + fmt(Math.abs(b.ecart)) + '</b> ' + (b.ecart < 0 ? 'de dépenses non saisies' : 'de rentrées non saisies'));
+  } else if(!checkpoints.length){
+    L += bilanLine('⚖️', 'Pointe ton solde réel pour mesurer ce qui échappe à la saisie.', 'Bouton « Pointer mon solde » sur l\'écran principal');
+  }
+  if(b.big){
+    L += bilanLine('🔝', 'Plus grosse dépense : <b>' + esc(b.big.desc || b.big.cat) + '</b> — ' + fmt(b.big.amount),
+      fmtDateRel(b.big.date));
+  }
+  if(b.tracked.days){
+    L += bilanLine('✍️', 'Saisies <b>' + b.joursSaisis + ' jour(s) sur ' + b.tracked.days + '</b>',
+      b.joursSaisis < b.tracked.days * 0.6 ? 'Les jours sans saisie sont souvent des dépenses oubliées.' : '');
+  }
+  return h + L;
+}
+function bilanDue(){
+  var P = prevMonthKey(today().slice(0,7));
+  return (bilanVu !== P && getEntries({ month: P }).length) ? P : null;
+}
+function renderBilanCard(){
+  var card = document.getElementById('bilan-card');
+  if(!card) return;
+  var P = bilanDue();
+  if(!P){ card.style.display = 'none'; return; }
+  document.getElementById('bilan-body').innerHTML = bilanHTML(P);
+  card.style.display = '';
+}
+function dismissBilan(){
+  var P = bilanDue();
+  if(!P) return;
+  bilanVu = P;
+  storageSet('budget_bilan_vu', P).then(renderAll);
+}
+function openBilanMonth(){
+  var P = bilanDue() || prevMonthKey(today().slice(0,7));
+  setMode('pro');
+  document.getElementById('m-year').value = P.slice(0,4);
+  document.getElementById('m-month').value = P.slice(5,7);
+  proTab('mois');
+  window.scrollTo(0, 0);
+}
+function currentMonthKey(){
+  return document.getElementById('m-year').value + '-' + document.getElementById('m-month').value;
+}
+function showBilan(P){ uiAlert(bilanHTML(P)); }
+
 /* ---------- render Pro ---------- */
 function renderToday(){
   var t = today();
@@ -2575,6 +2827,9 @@ function renderMonth(){
   renderDonut('month-donut', 'monthDonut', catBreakdown(arr, 'depense'));
   renderMonthChart(arr, y, m);
   renderBalanceChart(arr, y, m);
+  /* Le bilan n'a de sens que pour un mois termine. */
+  var bb = document.getElementById('month-bilan-btn');
+  if(bb) bb.style.display = (pre < today().slice(0,7) && arr.length) ? '' : 'none';
 }
 function renderMonthChart(arr, y, mo){
   if(typeof Chart === 'undefined') return;
@@ -2957,7 +3212,7 @@ function importJSON(ev){
           CP.forEach(function(c){ if(!marks[c.mark]) checkpoints.push(c); });
           checkpoints.sort(function(a, b){ return a.mark - b.mark; });
         }
-        entries.sort(function(a, b){ return b.date.localeCompare(a.date); });
+        sortEntries();
         planned.sort(function(a, b){ return a.date.localeCompare(b.date); });
         syncIdCounter();
         return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints()]).then(function(){
@@ -3239,8 +3494,36 @@ document.getElementById('planned-input').addEventListener('input', function(){
     : '';
 });
 
+/* ---------- passage a un nouveau jour ----------
+   Android garde la PWA en memoire sans la recharger : ouverte le 02/10, elle
+   pouvait servir encore le 03/10 avec le champ Date du mode Pro bloque sur le 02,
+   et une saisie partait sur la veille sans que le bandeau d'alerte ne s'affiche
+   (il n'etait calcule qu'au demarrage). A chaque retour dans l'app, et une fois
+   par minute tant qu'elle est a l'ecran, on verifie si le jour a change. */
+var shownDay = null;   // le jour que l'interface croit etre « aujourd'hui »
+function checkDayChange(){
+  var t = today();
+  if(shownDay === null){ shownDay = t; return false; }
+  if(t === shownDay) return false;
+  var ancien = shownDay;
+  shownDay = t;
+  ['f-date','d-date','planned-start-date','del-day'].forEach(function(id){
+    var el = document.getElementById(id);
+    /* Un champ volontairement antidate (≠ ancien jour) est respecte : le bandeau
+       le signalera, puisqu'il differe desormais d'aujourd'hui. */
+    if(el && (!el.value || el.value === ancien)) el.value = t;
+  });
+  updateDateFlag();
+  renderAll();
+  return true;
+}
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) checkDayChange(); });
+window.addEventListener('focus', checkDayChange);
+setInterval(function(){ if(!document.hidden) checkDayChange(); }, 60000);
+
 function initUI(){
   var t = today();
+  shownDay = t;
   ['f-date','d-date','planned-start-date','del-day'].forEach(function(id){
     var el = document.getElementById(id);
     if(el) el.value = t;
@@ -3280,6 +3563,7 @@ function watchColorScheme(){
 
 load().then(function(){
   syncIdCounter();
+  sortEntries();
   readTheme();
   initUI();
   watchColorScheme();
