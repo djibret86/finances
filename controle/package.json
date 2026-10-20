@@ -6,7 +6,8 @@
   "scripts": {
     "statique": "node verifier.mjs",
     "navigateur": "node tester-navigateur.mjs",
-    "tout": "node verifier.mjs && node tester-navigateur.mjs"
+    "calculs": "node tester-calculs.mjs",
+    "tout": "node verifier.mjs && node tester-navigateur.mjs && node tester-calculs.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.1"
