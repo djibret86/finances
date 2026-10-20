@@ -1,0 +1,71 @@
+# Contrôleur interne : chaque envoi est vérifié AVANT d'être mis en ligne.
+# Si un contrôle échoue, la publication n'a pas lieu et la version en ligne reste intacte.
+name: Contrôle et mise en ligne
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  controle:
+    name: Contrôle interne
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Contrôle statique (syntaxe, versions, fichiers, secrets)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          node controle/verifier.mjs --base "$BASE"
+
+      - name: Installation du navigateur de test
+        working-directory: controle
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Test réel dans le navigateur (format téléphone, hors ligne)
+        run: node controle/tester-navigateur.mjs
+
+  publication:
+    name: Mise en ligne
+    needs: controle
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Préparation des seuls fichiers de l'application
+        run: |
+          mkdir _site
+          cp index.html sw.js manifest.webmanifest icon-192.png icon-512.png _site/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+      - id: deploiement
+        uses: actions/deploy-pages@v4
