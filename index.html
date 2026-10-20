@@ -200,6 +200,15 @@ body{
   font-family:inherit;font-size:13px;color:var(--text);text-align:left;cursor:pointer;
 }
 
+/* ---------- Choix d'icone et de couleur ------------------ */
+.pick-row{display:flex;flex-wrap:wrap;gap:6px}
+.pick-btn{
+  width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;
+  border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;cursor:pointer;
+}
+.pick-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pick-btn.on{border-color:var(--sol);box-shadow:0 0 0 2px var(--sol)}
+
 /* ---------- Icones de categorie -------------------------- */
 .cat-ico{
   flex:0 0 auto;width:40px;height:40px;border-radius:12px;
@@ -922,6 +931,30 @@ details[open] summary::after{transform:rotate(-135deg)}
          et disparait definitivement une fois la revision close. -->
     <!-- Reclassement : regroupe les entrees « Autre » (et l'alcool encore range en
          Alimentation) par mot, pour les classer d'un geste. Invisible s'il n'y a rien. -->
+    <div class="card">
+      <div class="section-title">Mes catégories</div>
+      <div class="entry-list" id="custom-cat-list" style="max-height:none;margin-bottom:12px"></div>
+      <div id="cc-form" style="border-top:1px solid var(--line-soft);padding-top:12px">
+        <div style="font-size:14px;font-weight:650;margin-bottom:4px" id="cc-title">Nouvelle catégorie</div>
+        <label for="cc-type">Type</label>
+        <select id="cc-type"><option value="depense">Dépense</option><option value="gain">Gain</option></select>
+        <label for="cc-name">Nom</label>
+        <input type="text" id="cc-name" maxlength="30" placeholder="ex. Bière, Enfants, Tontine…" autocomplete="off">
+        <label>Icône</label>
+        <div class="pick-row" id="cc-icons"></div>
+        <label>Couleur</label>
+        <div class="pick-row" id="cc-colors"></div>
+        <label for="cc-kw">Mots-clés (séparés par des virgules)</label>
+        <input type="text" id="cc-kw" placeholder="ex. flag, castel, bière" autocomplete="off">
+        <div style="font-size:12px;color:var(--text-3);margin-top:6px">Une saisie qui contient un de ces mots ira directement dans cette catégorie.</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+          <button class="btn btn-sm" id="cc-cancel" style="display:none" onclick="resetCatForm()">Annuler</button>
+          <button class="btn btn-primary btn-sm" id="cc-submit" onclick="submitCatForm()">Créer</button>
+        </div>
+        <div id="cc-msg" style="font-size:13px;margin-top:8px"></div>
+      </div>
+    </div>
+
     <div class="card" id="reclass-card" style="display:none">
       <div class="section-title">Entrées à mieux classer</div>
       <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
@@ -1090,7 +1123,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v16';
+var APP_VERSION = 'v17';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Alcool':'#A23B5A','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1380,6 +1413,10 @@ function load(){
     return storageGet('budget_bilan_vu');
   }).then(function(r){
     if(r && r.value) bilanVu = r.value;
+    return storageGet('budget_custom_cats');
+  }).then(function(r){
+    if(r && r.value){ try { customCats = sanitizeCustomCats(JSON.parse(r.value)); } catch(e){} }
+    applyCustomCats();
     setStorageStatus(true);
   });
 }
@@ -1625,6 +1662,224 @@ function matchesKeyword(d, kw){
   }
   return false;
 }
+/* ---------- categories personnalisees ----------
+   Les categories livrees ne couvriront jamais toutes les vies : il a fallu une
+   mise a jour pour creer « Alcool ». L'utilisateur cree donc les siennes, avec
+   leurs mots-cles. Elles s'ajoutent a CATS (avant « Autre ») et a AUTO_CAT, que
+   tout le reste du script lit deja : listes, budgets, bilans, reclassement.
+   Les categories livrees restent fixes : leurs noms sont ecrits dans les mots-cles.
+   Les mots-cles perso passent EN TETE d'AUTO_CAT : a longueur egale, autoCat garde
+   le premier trouve, c'est donc le choix de l'utilisateur qui l'emporte. */
+var customCats = { gain: [], depense: [] };   // [{ name, color, icon, kw: [mots] }]
+var BASE_CATS = { gain: CATS.gain.slice(), depense: CATS.depense.slice() };
+var BASE_AUTO = { gain: AUTO_CAT.gain.slice(), depense: AUTO_CAT.depense.slice() };
+var CUSTOM_COLORS = ['#2E86AB','#E07A5F','#3D9970','#B565A7','#D4A017','#5C6BC0','#C0392B','#00897B'];
+var CUSTOM_ICONS = {
+  tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  cart:'<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l3 12h11l2-8H6"/>',
+  wallet:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h2M3 9h15V6"/>',
+  heart:'<path d="M12 20s-7-4.5-9-9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c-2 4.5-9 9-9 9z"/>',
+  star:'<path d="M12 3l2.7 5.5 6 .9-4.4 4.3 1 6L12 16.9l-5.3 2.8 1-6-4.4-4.3 6-.9z"/>',
+  gift:'<path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9C10 5 6 5 6 8s6 1 6 1 6 2 6-1-4-3-6 1"/>',
+  book:'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 19V5"/>',
+  person:'<circle cx="12" cy="7" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',
+  glass:'<path d="M8 3h8l-.5 6a3.5 3.5 0 0 1-7 0zM12 12.5V20M8 21h8"/>',
+  cup:'<path d="M4 8h12v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 10h2a2 2 0 0 1 0 4h-2M8 3v2M12 3v2"/>',
+  plane:'<path d="M2 16l20-8-6 12-3-5z"/>',
+  bolt:'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>'
+};
+function saveCustomCats(){ return storageSet('budget_custom_cats', JSON.stringify(customCats)); }
+function applyCustomCats(){
+  ['gain', 'depense'].forEach(function(t){
+    var noms = customCats[t].map(function(c){ return c.name; });
+    var liste = BASE_CATS[t].filter(function(c){ return c !== 'Autre'; }).concat(noms, ['Autre']);
+    CATS[t].length = 0;                       // meme tableau : les references gardees ailleurs suivent
+    liste.forEach(function(c){ CATS[t].push(c); });
+    AUTO_CAT[t] = customCats[t].filter(function(c){ return c.kw.length; })
+      .map(function(c){ return [c.name, c.kw]; }).concat(BASE_AUTO[t]);
+    customCats[t].forEach(function(c){
+      CAT_COLORS[c.name] = c.color;
+      CAT_SVG[c.name] = CUSTOM_ICONS[c.icon] || CUSTOM_ICONS.tag;
+      CAT_ICONS[c.name] = '🏷️';
+    });
+  });
+}
+/* Un nom finit dans des attributs onclick et des id (budgets) : on refuse les
+   caracteres qui les casseraient plutot que de tout echapper partout. */
+function checkCatName(type, name, ancien){
+  if(!name) return 'Donne un nom à la catégorie.';
+  if(name.length > 30) return 'Nom trop long (30 caractères au plus).';
+  if(/['"<>|\\]/.test(name)) return 'Le nom ne peut pas contenir \' " < > | ou \\.';
+  var lc = name.toLowerCase();
+  var pris = CATS.gain.concat(CATS.depense).some(function(c){ return c.toLowerCase() === lc && c !== ancien; });
+  return pris ? 'La catégorie « ' + name + ' » existe déjà.' : null;
+}
+function parseKeywords(txt){
+  var vus = {};
+  return String(txt || '').toLowerCase().split(/[,;\n]+/)
+    .map(function(m){ return m.trim(); })
+    .filter(function(m){ if(m.length < 2 || vus[m]) return false; vus[m] = 1; return true; })
+    .slice(0, 40);
+}
+function findCustom(type, name){
+  return customCats[type].filter(function(c){ return c.name === name; })[0] || null;
+}
+/* Renvoie un message d'erreur, ou null si la categorie est creee. */
+function addCustomCat(type, name, color, icon, kwText){
+  name = String(name || '').trim();
+  if(type !== 'gain' && type !== 'depense') return 'Type inconnu.';
+  var err = checkCatName(type, name, null);
+  if(err) return err;
+  customCats[type].push({ name: name, color: CUSTOM_COLORS.indexOf(color) !== -1 ? color : CUSTOM_COLORS[0],
+    icon: CUSTOM_ICONS[icon] ? icon : 'tag', kw: parseKeywords(kwText) });
+  applyCustomCats();
+  return null;
+}
+/* Renommer touche tout ce qui porte le nom : entrees, previsions, budget, regles apprises. */
+function updateCustomCat(type, ancien, name, color, icon, kwText){
+  var c = findCustom(type, ancien);
+  if(!c) return 'Catégorie introuvable.';
+  name = String(name || '').trim();
+  var err = checkCatName(type, name, ancien);
+  if(err) return err;
+  if(name !== ancien){
+    entries.concat(planned).forEach(function(e){ if(e.type === type && e.cat === ancien) e.cat = name; });
+    if(type === 'depense' && budgets[ancien]){ budgets[name] = budgets[ancien]; delete budgets[ancien]; }
+    Object.keys(learnedCats).forEach(function(k){
+      if(k.indexOf(type + '|') === 0 && learnedCats[k] === ancien) learnedCats[k] = name;
+    });
+    delete CAT_COLORS[ancien]; delete CAT_SVG[ancien]; delete CAT_ICONS[ancien];
+  }
+  c.name = name;
+  if(CUSTOM_COLORS.indexOf(color) !== -1) c.color = color;
+  if(CUSTOM_ICONS[icon]) c.icon = icon;
+  c.kw = parseKeywords(kwText);
+  applyCustomCats();
+  return null;
+}
+/* Supprimer renvoie ses entrees dans « Autre » (d'ou la carte de reclassement
+   les reproposera) et oublie le budget et les regles qui y menaient. */
+function deleteCustomCat(type, name){
+  if(!findCustom(type, name)) return 'Catégorie introuvable.';
+  entries.concat(planned).forEach(function(e){ if(e.type === type && e.cat === name) e.cat = 'Autre'; });
+  if(type === 'depense') delete budgets[name];
+  Object.keys(learnedCats).forEach(function(k){
+    if(k.indexOf(type + '|') === 0 && learnedCats[k] === name) delete learnedCats[k];
+  });
+  customCats[type] = customCats[type].filter(function(c){ return c.name !== name; });
+  delete CAT_COLORS[name]; delete CAT_SVG[name]; delete CAT_ICONS[name];
+  applyCustomCats();
+  return null;
+}
+function sanitizeCustomCats(obj){
+  var clean = { gain: [], depense: [] };
+  if(!obj || typeof obj !== 'object') return clean;
+  ['gain', 'depense'].forEach(function(t){
+    (Array.isArray(obj[t]) ? obj[t] : []).forEach(function(c){
+      if(!c || typeof c.name !== 'string') return;
+      var n = c.name.trim();
+      if(!n || n.length > 30 || /['"<>|\\]/.test(n)) return;
+      if(BASE_CATS[t].indexOf(n) !== -1 || clean[t].some(function(x){ return x.name === n; })) return;
+      clean[t].push({ name: n, color: CUSTOM_COLORS.indexOf(c.color) !== -1 ? c.color : CUSTOM_COLORS[0],
+        icon: CUSTOM_ICONS[c.icon] ? c.icon : 'tag', kw: parseKeywords((c.kw || []).join(',')) });
+    });
+  });
+  return clean;
+}
+function saveCatChange(){
+  return Promise.all([saveCustomCats(), save(), savePlanned(), saveBudgets(), saveLearned()]).then(function(){
+    updateCats();
+    renderAll();
+  });
+}
+
+/* --- ecran « Mes categories » --- */
+var catForm = { type: 'depense', editing: null, color: CUSTOM_COLORS[0], icon: 'tag' };
+function renderCustomCats(){
+  var list = document.getElementById('custom-cat-list');
+  if(!list) return;
+  var tous = customCats.depense.map(function(c){ return ['depense', c]; })
+    .concat(customCats.gain.map(function(c){ return ['gain', c]; }));
+  list.innerHTML = tous.length ? tous.map(function(x){
+    var t = x[0], c = x[1];
+    var n = entries.filter(function(e){ return e.type === t && e.cat === c.name; }).length;
+    return '<div class="entry-item">' + catIcon(c.name) +
+      '<div class="entry-meta"><div class="entry-title">' + esc(c.name) + '</div>' +
+      '<div class="entry-cat">' + (t === 'gain' ? 'Gain' : 'Dépense') + ' · ' + n + ' entrée(s)' +
+        (c.kw.length ? ' · mots-clés : ' + esc(c.kw.join(', ')) : '') + '</div></div>' +
+      '<button class="btn btn-sm" onclick="editCustomCat(\'' + t + '\', \'' + c.name + '\')" aria-label="Modifier">✎</button>' +
+      '<button class="btn btn-danger btn-sm" onclick="confirmDeleteCustomCat(\'' + t + '\', \'' + c.name + '\')" aria-label="Supprimer">✕</button>' +
+    '</div>';
+  }).join('') : '<div class="empty">Aucune catégorie personnalisée pour l\'instant.</div>';
+  renderCatPickers();
+}
+function renderCatPickers(){
+  var ic = document.getElementById('cc-icons'), co = document.getElementById('cc-colors');
+  if(!ic || !co) return;
+  ic.innerHTML = Object.keys(CUSTOM_ICONS).map(function(k){
+    return '<button type="button" class="pick-btn' + (catForm.icon === k ? ' on' : '') + '" onclick="catForm.icon=\'' + k + '\';renderCatPickers()" aria-label="Icône ' + k + '">' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true">' + CUSTOM_ICONS[k] + '</svg></button>';
+  }).join('');
+  co.innerHTML = CUSTOM_COLORS.map(function(c){
+    return '<button type="button" class="pick-btn' + (catForm.color === c ? ' on' : '') + '" onclick="catForm.color=\'' + c + '\';renderCatPickers()" aria-label="Couleur ' + c + '">' +
+      '<span style="display:block;width:22px;height:22px;border-radius:50%;background:' + c + '"></span></button>';
+  }).join('');
+  ic.style.color = catForm.color;
+}
+function editCustomCat(type, name){
+  var c = findCustom(type, name);
+  if(!c) return;
+  catForm = { type: type, editing: name, color: c.color, icon: c.icon };
+  document.getElementById('cc-type').value = type;
+  document.getElementById('cc-type').disabled = true;     // le type ne change pas apres creation
+  document.getElementById('cc-name').value = c.name;
+  document.getElementById('cc-kw').value = c.kw.join(', ');
+  document.getElementById('cc-title').textContent = 'Modifier « ' + c.name + ' »';
+  document.getElementById('cc-submit').textContent = 'Enregistrer';
+  document.getElementById('cc-cancel').style.display = '';
+  document.getElementById('cc-msg').textContent = '';
+  renderCatPickers();
+  document.getElementById('cc-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function resetCatForm(){
+  catForm = { type: 'depense', editing: null, color: CUSTOM_COLORS[0], icon: 'tag' };
+  document.getElementById('cc-type').disabled = false;
+  document.getElementById('cc-type').value = 'depense';
+  document.getElementById('cc-name').value = '';
+  document.getElementById('cc-kw').value = '';
+  document.getElementById('cc-title').textContent = 'Nouvelle catégorie';
+  document.getElementById('cc-submit').textContent = 'Créer';
+  document.getElementById('cc-cancel').style.display = 'none';
+  renderCatPickers();
+}
+function submitCatForm(){
+  var type = document.getElementById('cc-type').value;
+  var name = document.getElementById('cc-name').value;
+  var kw = document.getElementById('cc-kw').value;
+  var msg = document.getElementById('cc-msg');
+  var err = catForm.editing
+    ? updateCustomCat(catForm.type, catForm.editing, name, catForm.color, catForm.icon, kw)
+    : addCustomCat(type, name, catForm.color, catForm.icon, kw);
+  if(err){ msg.style.color = DEP_COL; msg.textContent = err; return; }
+  var fait = catForm.editing ? 'modifiée' : 'créée';
+  resetCatForm();
+  saveCatChange().then(function(){
+    msg.style.color = GAIN_COL;
+    msg.textContent = '✓ Catégorie « ' + name.trim() + ' » ' + fait + '.';
+  });
+}
+function confirmDeleteCustomCat(type, name){
+  var n = entries.filter(function(e){ return e.type === type && e.cat === name; }).length;
+  uiConfirm('Supprimer la catégorie « ' + esc(name) + ' » ?' +
+    (n ? '\n<span style="font-size:12px;color:var(--text-3)">Ses ' + n + ' entrée(s) passeront dans « Autre ».</span>' : ''), 'Supprimer')
+    .then(function(ok){
+      if(!ok) return;
+      if(deleteCustomCat(type, name)) return;
+      if(catForm.editing === name) resetCatForm();
+      saveCatChange();
+    });
+}
+
 /* ---------- categories apprises ----------
    Les mots-cles livres avec l'app ne connaitront jamais les noms de boutiques,
    les prenoms de fournisseurs ni le vocabulaire local. Plutot que d'attendre une
@@ -3353,7 +3608,7 @@ function exportCSV(){
 }
 function backupBlob(){
   var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned,
-            learnedCats: learnedCats, checkpoints: checkpoints, exported_at: new Date().toISOString() };
+            learnedCats: learnedCats, checkpoints: checkpoints, customCats: customCats, exported_at: new Date().toISOString() };
   return new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
 }
 function backupName(){ return 'finances_backup_' + today() + '.json'; }
@@ -3518,6 +3773,14 @@ function importJSON(ev){
       var E = sanitizeList(d.entries), P = sanitizeList(d.planned || []);
       var dropMsg = (E.dropped + P.dropped) ? '\n⚠️ ' + (E.dropped + P.dropped) + ' ligne(s) corrompue(s) ignorée(s).' : '';
       uiConfirm('Sauvegarde : ' + E.clean.length + ' entrée(s) · ' + P.clean.length + ' prévision(s)' + dropMsg + '\n\nRemplacer les données actuelles ou fusionner ?', 'Remplacer', 'Fusionner').then(function(rep){
+        /* Categories perso d'abord : sanitizeBudgets et sanitizeLearned ecartent
+           tout ce qui pointe vers une categorie inconnue. */
+        var CC = sanitizeCustomCats(d.customCats);
+        if(rep) customCats = CC;
+        else ['gain', 'depense'].forEach(function(t){
+          CC[t].forEach(function(c){ if(!findCustom(t, c.name) && CATS[t].indexOf(c.name) === -1) customCats[t].push(c); });
+        });
+        applyCustomCats();
         if(rep){
           entries = E.clean; planned = P.clean;
           budgets = sanitizeBudgets(d.budgets);
@@ -3546,7 +3809,8 @@ function importJSON(ev){
         sortEntries();
         planned.sort(function(a, b){ return a.date.localeCompare(b.date); });
         syncIdCounter();
-        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints()]).then(function(){
+        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats()]).then(function(){
+          updateCats();
           msg.style.color = GAIN_COL;
           msg.textContent = '✓ Restauré — ' + entries.length + ' entrée(s), ' + planned.length + ' prévision(s).';
           renderAll();
@@ -3739,7 +4003,7 @@ function renderCurrentProTab(){
   else if(id === 'mois') renderMonth();
   else if(id === 'annee') renderYear();
   else if(id === 'budgets') renderBudgets();
-  else if(id === 'export'){ renderLastBackup(); renderReclass(); renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
+  else if(id === 'export'){ renderLastBackup(); renderCustomCats(); renderReclass(); renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
 }
 function populateSelects(){
   var now = new Date(), cy = now.getFullYear();
