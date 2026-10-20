@@ -99,6 +99,25 @@ try {
 
     // --- Solde global ---
     ok('Solde global', sumType(entries, 'gain') - sumType(entries, 'depense'), 580000 - 207999);
+
+    // --- Catégories personnalisées ---
+    ok('Création « Enfants »', addCustomCat('depense', 'Enfants', '#2E86AB', 'person', 'couches, crèche, lait bébé'), null);
+    ok('Rangée avant « Autre »', CATS.depense.slice(-2), ['Enfants', 'Autre']);
+    ok('Mot-clé perso → Enfants', autoCat('Couches Pampers', 'depense'), 'Enfants');
+    ok('Mot-clé perso prioritaire (« lait bébé » plus long que « lait »)', autoCat('lait bébé', 'depense'), 'Enfants');
+    ok('Doublon refusé', addCustomCat('depense', 'alcool', '#2E86AB', 'tag', ''), 'La catégorie « alcool » existe déjà.');
+    ok('Apostrophe refusée', addCustomCat('depense', "Fête d'école", '#2E86AB', 'tag', '') !== null, true);
+    entries.push({ id: 9, date: '2026-10-20', type: 'depense', cat: 'Enfants', amount: 7000, desc: 'Couches' });
+    budgets.Enfants = 20000;
+    learnedCats['depense|pampers'] = 'Enfants';
+    ok('Renommage', updateCustomCat('depense', 'Enfants', 'Bébé', '#2E86AB', 'person', 'couches'), null);
+    ok('Renommage : entrée suivie', entries.filter(e => e.id === 9)[0].cat, 'Bébé');
+    ok('Renommage : budget suivi', [budgets.Bebe, budgets['Bébé'], budgets.Enfants], [undefined, 20000, undefined]);
+    ok('Renommage : règle apprise suivie', learnedCats['depense|pampers'], 'Bébé');
+    ok('Suppression', deleteCustomCat('depense', 'Bébé'), null);
+    ok('Suppression : entrée passée en Autre', entries.filter(e => e.id === 9)[0].cat, 'Autre');
+    ok('Suppression : budget et règle oubliés', [budgets['Bébé'], learnedCats['depense|pampers']], [undefined, undefined]);
+    ok('Suppression : retirée des listes', CATS.depense.indexOf('Bébé'), -1);
     return r;
   });
   for (const [nom, obtenu, attendu] of cas) {
