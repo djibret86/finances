@@ -54,6 +54,16 @@
   --chart-2:#8E6CB8;
   --chart-2-fill:rgba(142,108,184,.13);
 
+  /* Carte du solde (fond sombre dans les deux themes) */
+  --hero-bg:#0C1017;
+  --hero-tile:#1C2430;
+  --hero-line:#2A3340;
+  --hero-text:#FFFFFF;
+  --hero-sub:#B7C0CC;
+  --hero-gain:#5FD3A6;
+  --hero-dep:#FF9A6B;
+  --hero-warn:#F2B866;
+
   /* Formes */
   --r-card:20px;
   --r-ctl:14px;
@@ -73,34 +83,58 @@ body{
   font-size:15px;line-height:1.45;
   color:var(--text);
   background:var(--bg);
-  padding:14px 14px 96px;
+  padding:14px 14px calc(100px + env(safe-area-inset-bottom));
   max-width:600px;margin:0 auto;
   -webkit-font-smoothing:antialiased;
   -webkit-tap-highlight-color:transparent;
   font-variant-numeric:tabular-nums;
 }
 
-/* ---------- Bascule Lite / Pro ---------------------------- */
-.mode-toggle{
-  display:flex;gap:4px;
-  background:var(--surface-2);
-  border-radius:var(--r-pill);
-  padding:4px;margin-bottom:18px;
-  box-shadow:inset 0 1px 2px rgba(12,16,23,.05);
+/* ---------- Barre de navigation du bas ------------------- */
+.bottom-nav{
+  position:fixed;left:0;right:0;bottom:0;z-index:50;
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;
+  padding:6px max(8px,calc((100% - 600px) / 2)) calc(6px + env(safe-area-inset-bottom));
+  background:var(--surface);border-top:1px solid var(--line);
 }
-.mode-btn{
-  flex:1;min-height:44px;padding:11px 10px;
-  border:none;border-radius:var(--r-pill);
-  background:transparent;color:var(--text-3);
-  font-family:inherit;font-size:15px;font-weight:600;letter-spacing:.01em;
-  cursor:pointer;
-  transition:background .22s var(--ease),color .22s var(--ease),transform .12s var(--ease);
+.nav-btn{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  min-height:52px;padding:4px 0;
+  border:none;background:none;border-radius:12px;
+  font-family:inherit;font-size:11px;font-weight:550;color:var(--text-3);
+  cursor:pointer;transition:color .18s var(--ease),transform .12s var(--ease);
 }
-.mode-btn:active{transform:scale(.97)}
-.mode-btn.active{
-  background:var(--text);color:#fff;
-  box-shadow:0 1px 3px rgba(12,16,23,.25);
+.nav-btn:active{transform:scale(.94)}
+.nav-btn svg,.icon-btn svg,.add-btn svg{
+  fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
 }
+.nav-btn svg{width:22px;height:22px}
+.nav-btn.active{color:var(--sol);font-weight:700}
+
+/* ---------- En-tetes de page ----------------------------- */
+.page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:4px 2px 14px}
+.page-title{font-size:24px;font-weight:800;letter-spacing:-.01em;line-height:1.2;margin:4px 2px 14px}
+.page-head .page-title{margin:0}
+.icon-btn{
+  flex:0 0 auto;width:44px;height:44px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--text);background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-ctl);cursor:pointer;
+}
+.icon-btn svg{width:20px;height:20px}
+
+/* ---------- Selecteur Jour / Mois / Annee ---------------- */
+.seg{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;
+  background:var(--surface-2);border-radius:var(--r-ctl);
+  padding:4px;margin-bottom:14px;
+}
+.seg-btn{
+  min-height:40px;border:none;border-radius:10px;background:transparent;
+  font-family:inherit;font-size:14px;font-weight:550;color:var(--text-2);cursor:pointer;
+  transition:background .2s var(--ease),color .2s var(--ease);
+}
+.seg-btn.active{background:var(--surface);color:var(--text);font-weight:650;box-shadow:0 1px 3px rgba(12,16,23,.12)}
 
 /* ---------- Cartes ---------------------------------------- */
 .card{
@@ -112,31 +146,57 @@ body{
 }
 .card-flat{background:var(--surface-2);border-color:transparent;box-shadow:none}
 
-/* ---------- Ecran Lite : le solde domine ------------------ */
-.lite-balance{padding:30px 18px 22px;text-align:center;position:relative;overflow:hidden}
-.lite-balance::after{
-  content:"";position:absolute;left:50%;top:-140px;width:320px;height:320px;
-  transform:translateX(-50%);border-radius:50%;
-  background:radial-gradient(circle,rgba(29,95,209,.10),transparent 65%);
-  pointer-events:none;
+/* ---------- Ecran Accueil : le solde domine --------------- */
+.lite-date{font-size:13px;font-weight:500;color:var(--text-3)}
+.lite-date::first-letter{text-transform:uppercase}
+.hero{
+  background:var(--hero-bg);color:var(--hero-text);
+  border-color:var(--hero-bg);border-radius:24px;
+  padding:22px 20px;box-shadow:var(--sh-2);
 }
-.lite-date{
-  font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
-  color:var(--text-3);margin-bottom:10px;
+.hero-label{font-size:13px;color:var(--hero-sub)}
+.hero-solde{
+  font-size:clamp(34px,11vw,44px);font-weight:800;letter-spacing:-.02em;line-height:1.1;
+  margin:4px 0 16px;color:var(--hero-text);transition:color .2s var(--ease);
 }
-.lite-solde{
-  font-size:clamp(38px,12vw,52px);font-weight:750;letter-spacing:-.03em;line-height:1.02;
-  color:var(--text);
+.hero-solde.neg{color:var(--hero-dep)}
+.hero-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.hero-tile{background:var(--hero-tile);border-radius:16px;padding:12px 14px;font-size:12px;color:var(--hero-sub)}
+.hero-tile b{display:block;margin-top:2px;font-size:17px;font-weight:650;white-space:nowrap}
+.hero-gain{color:var(--hero-gain)}
+.hero-dep{color:var(--hero-dep)}
+.hero-foot{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+  margin-top:14px;padding-top:12px;border-top:1px solid var(--hero-line);
+  font-size:12px;color:var(--hero-sub);
 }
-.lite-sub{
-  display:flex;gap:10px;justify-content:center;margin-top:14px;
-  font-size:15px;font-weight:650;
+.hero-foot b{font-size:15px}
+
+/* ---------- Saisie rapide -------------------------------- */
+.hero-row{display:flex;gap:8px}
+.hero-row input{flex:1;min-width:0}
+.add-btn{
+  flex:0 0 auto;width:48px;min-height:46px;
+  display:inline-flex;align-items:center;justify-content:center;
+  border:none;border-radius:var(--r-ctl);
+  background:var(--sol);color:#fff;cursor:pointer;
+  transition:transform .12s var(--ease);
 }
-.lite-sub>span{
-  padding:6px 12px;border-radius:var(--r-pill);
-  background:var(--surface);box-shadow:var(--sh-1);
+.add-btn:active{transform:scale(.95)}
+.add-btn svg{width:22px;height:22px;stroke-width:2.4}
+.link-btn{
+  min-height:44px;padding:0;border:none;background:none;
+  font-family:inherit;font-size:14px;font-weight:600;color:var(--sol);cursor:pointer;
 }
-.lite-solde,.lite-sub{transition:color .2s var(--ease)}
+
+/* ---------- Icones de categorie -------------------------- */
+.cat-ico{
+  flex:0 0 auto;width:40px;height:40px;border-radius:12px;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.cat-ico svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.cat-ico.sm{width:32px;height:32px;border-radius:10px}
+.cat-ico.sm svg{width:17px;height:17px}
 
 /* ---------- Champs ---------------------------------------- */
 input,select,textarea{
@@ -213,24 +273,7 @@ details[open] summary::after{transform:rotate(-135deg)}
 .btn-success:hover{background:var(--gain-soft);border-color:var(--gain)}
 .btn-sm{min-height:38px;padding:9px 14px;font-size:13.5px;border-radius:11px}
 
-/* ---------- Onglets Pro ---------------------------------- */
-.tabs{
-  display:flex;gap:6px;overflow-x:auto;
-  margin:0 -14px 16px;padding:0 14px 10px;
-  border-bottom:1px solid var(--line);
-  scrollbar-width:none;-webkit-overflow-scrolling:touch;
-}
-.tabs::-webkit-scrollbar{display:none}
-.tab{
-  flex:0 0 auto;min-height:44px;padding:10px 16px;
-  white-space:nowrap;font-family:inherit;font-size:14.5px;font-weight:600;
-  color:var(--text-3);background:var(--surface-2);
-  border:none;border-radius:var(--r-pill);cursor:pointer;
-  transition:background .2s var(--ease),color .2s var(--ease),transform .12s var(--ease);
-}
-.tab:active{transform:scale(.97)}
-.tab.active{background:var(--text);color:#fff;font-weight:650}
-
+/* ---------- Sections Pro -------------------------------- */
 .pro-section{display:none}
 .pro-section.active{display:block;animation:sectionIn .26s var(--ease) both}
 @keyframes sectionIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -238,24 +281,18 @@ details[open] summary::after{transform:rotate(-135deg)}
 /* ---------- Metriques ------------------------------------ */
 .metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}
 .metric{
-  position:relative;overflow:hidden;
-  border-radius:18px;padding:16px 10px;text-align:center;color:#fff;
-  box-shadow:var(--sh-1);
+  border-radius:18px;padding:14px 12px;
+  color:var(--text);background:var(--surface);
+  border:1px solid var(--line-soft);box-shadow:var(--sh-1);
 }
-.metric::before{
-  content:"";position:absolute;inset:0;
-  background:linear-gradient(180deg,rgba(255,255,255,.16),transparent 60%);
-  pointer-events:none;
-}
-.metric-gain{background:linear-gradient(145deg,var(--gain),var(--gain-2))}
-.metric-dep{background:linear-gradient(145deg,var(--dep),var(--dep-2))}
-.metric-sol{background:linear-gradient(145deg,var(--sol),var(--sol-2))}
-.metric-sol.neg{background:linear-gradient(145deg,var(--sol-neg),var(--sol-neg-2))}
-.metric-label{
-  font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;
-  opacity:.9;margin-bottom:5px;
-}
-.metric-value{font-size:18px;font-weight:750;letter-spacing:-.015em}
+.metric-gain .metric-value{color:var(--gain-strong)}
+.metric-dep .metric-value{color:var(--dep-strong)}
+.metric-sol{background:var(--hero-bg);border-color:var(--hero-bg)}
+.metric-sol .metric-label{color:var(--hero-sub)}
+.metric-sol .metric-value{color:var(--hero-text)}
+.metric-sol.neg .metric-value{color:var(--hero-dep)}
+.metric-label{font-size:12px;font-weight:500;color:var(--text-3);margin-bottom:4px}
+.metric-value{font-size:19px;font-weight:800;letter-spacing:-.015em}
 
 .gain-color{color:var(--gain-strong)}
 .dep-color{color:var(--dep-strong)}
@@ -264,29 +301,32 @@ details[open] summary::after{transform:rotate(-135deg)}
 
 /* ---------- Listes d'entrees ----------------------------- */
 .entry-list{
-  display:flex;flex-direction:column;gap:7px;
+  display:flex;flex-direction:column;
   max-height:400px;overflow-y:auto;
   scrollbar-width:thin;scrollbar-color:var(--line) transparent;
 }
 .entry-list::-webkit-scrollbar{width:5px}
 .entry-list::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
 .entry-item{
-  display:flex;align-items:center;gap:9px;
-  padding:11px 12px;font-size:14px;
-  background:var(--surface-3);
-  border:1px solid var(--line-soft);border-radius:14px;
+  display:flex;align-items:center;gap:10px;
+  padding:10px 2px;font-size:14px;
+  border-top:1px solid var(--line-soft);
   transition:background .16s var(--ease),transform .12s var(--ease);
 }
+.entry-item:first-child{border-top:none}
 /* Boutons d'action des lignes : carres compacts. Sans cela, un .btn-sm
    normal elargit la colonne de droite, la colonne texte se retrecit et
    chaque libelle passe a la ligne (ligne a 89px au lieu de 60). */
 .entry-item .btn-sm,.planned-actions .btn-sm{
   flex:0 0 auto;width:36px;min-height:36px;padding:0;font-size:15px;
 }
-.entry-item:hover{background:var(--surface-2)}
+/* Dans les listes, les actions restent discretes : le montant prime. */
+.entry-item .btn-sm{border-color:transparent;background:transparent;color:var(--text-3)}
+.entry-item .btn-danger{color:var(--dep)}
 .entry-item:active{transform:scale(.995)}
 .entry-meta{flex:1;min-width:0;font-weight:550}
-.entry-cat{font-size:12px;color:var(--text-3);margin-top:3px;font-weight:500}
+.entry-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.entry-cat{font-size:12px;color:var(--text-3);margin-top:2px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .entry-amount{
   text-align:right;font-size:15.5px;font-weight:700;letter-spacing:-.01em;
   white-space:nowrap;
@@ -316,7 +356,7 @@ details[open] summary::after{transform:rotate(-135deg)}
   padding:11px 0;border-bottom:1px solid var(--line-soft);
 }
 .cat-row:last-child{border-bottom:none}
-.cat-name{min-width:118px;flex-shrink:0;font-size:14px;font-weight:550}
+.cat-name{min-width:96px;flex-shrink:0;font-size:14px;font-weight:550}
 .cat-bar{
   flex:1;height:8px;border-radius:var(--r-pill);overflow:hidden;
   background:var(--surface-2);
@@ -335,9 +375,13 @@ details[open] summary::after{transform:rotate(-135deg)}
 .budget-row{padding:15px 0;border-bottom:1px solid var(--line-soft)}
 .budget-row:last-child{border-bottom:none}
 .budget-header{
-  display:flex;justify-content:space-between;align-items:center;
+  display:flex;align-items:center;gap:12px;
   margin-bottom:10px;font-size:14.5px;
 }
+.budget-name{flex:1;min-width:0}
+.budget-status{font-size:12px;font-weight:550;margin-top:1px}
+.budget-amt{text-align:right;white-space:nowrap}
+.budget-amt div{font-size:12px;color:var(--text-3)}
 .budget-bar{
   height:10px;margin-bottom:9px;
   background:var(--surface-2);border-radius:var(--r-pill);overflow:hidden;
@@ -365,8 +409,8 @@ details[open] summary::after{transform:rotate(-135deg)}
 
 /* ---------- Titres de section --------------------------- */
 .section-title{
-  font-size:12.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
-  color:var(--text-3);margin-bottom:12px;
+  font-size:15px;font-weight:650;
+  color:var(--text);margin-bottom:12px;
 }
 
 /* ---------- Alertes ------------------------------------- */
@@ -430,7 +474,8 @@ details[open] summary::after{transform:rotate(-135deg)}
   .btn-success:hover{background:var(--surface);border-color:rgba(7,135,91,.38)}
   .shortcut-chip:hover{background:var(--surface-3);border-color:var(--line)}
   .shortcut-add:hover{background:transparent}
-  .entry-item:hover,.planned-item:hover{background:var(--surface-3)}
+  .entry-item .btn-sm:hover{background:transparent;border-color:transparent}
+  .planned-item:hover{background:var(--surface-3)}
   .due-today:hover{background:var(--warn-soft)}
 }
 @media (prefers-reduced-motion:reduce){
@@ -482,18 +527,22 @@ details[open] summary::after{transform:rotate(-135deg)}
     --chart-2:#A98AD4;
     --chart-2-fill:rgba(169,138,212,.18);
 
+    --hero-bg:#1E242E;
+    --hero-tile:#151A22;
+    --hero-line:#2C3440;
+
     --sh-1:0 1px 2px rgba(0,0,0,.5);
     --sh-2:0 12px 36px rgba(0,0,0,.6);
   }
   .card{border-color:var(--line-soft)}
   .card-flat{background:var(--surface-2)}
-  .lite-balance::after{background:radial-gradient(circle,rgba(91,143,249,.14),transparent 65%)}
-  .mode-btn.active,.tab.active{background:var(--sol);color:#0B0E13}
+  .hero,.metric-sol{border-color:var(--line)}
+  .add-btn{color:#08101F}
+  .seg-btn.active{background:var(--surface-3);box-shadow:none}
   .btn-primary{background:var(--sol);color:#08101F;border-color:var(--sol);box-shadow:none}
   .btn-primary:hover{background:var(--sol-2);border-color:var(--sol-2)}
   .btn:hover{border-color:#3A4453}
   .alert-warn{color:var(--warn)}
-  .metric::before{background:linear-gradient(180deg,rgba(255,255,255,.10),transparent 60%)}
   input,select,textarea{color:var(--text);background:var(--surface)}
   input:hover,select:hover,textarea:hover,.shortcut-chip:hover{border-color:#3A4453}
   *::selection{background:rgba(91,143,249,.3)}
@@ -540,12 +589,17 @@ details[open] summary::after{transform:rotate(-135deg)}
   <button class="btn btn-sm" onclick="snoozeBackup()" style="flex:0 0 auto;width:36px;padding:0" title="Plus tard">✕</button>
 </div>
 
-<div class="mode-toggle">
-  <button class="mode-btn active" id="btn-lite" onclick="setMode('lite')">Lite</button>
-  <button class="mode-btn" id="btn-pro" onclick="setMode('pro')">Pro</button>
-</div>
-
 <div id="mode-lite">
+  <div class="page-head">
+    <div>
+      <div class="lite-date" id="lite-date"></div>
+      <h1 class="page-title">Bonjour</h1>
+    </div>
+    <button type="button" class="icon-btn" onclick="startCheckpoint()" aria-label="Pointer mon solde" title="Pointer mon solde">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 21h14M5 7h14M5 7l-3 7a4 4 0 0 0 6 0zM19 7l-3 7a4 4 0 0 0 6 0z"/></svg>
+    </button>
+  </div>
+
   <!-- Bilan du mois ecoule : affiche du 1er du mois jusqu'a ce qu'on le ferme. -->
   <div class="card" id="bilan-card" style="display:none">
     <div id="bilan-body"></div>
@@ -555,27 +609,33 @@ details[open] summary::after{transform:rotate(-135deg)}
     </div>
   </div>
 
-  <div class="card card-flat lite-balance">
-    <div class="lite-date" id="lite-date"></div>
-    <div class="lite-solde" id="lite-solde">0 F</div>
-    <div class="lite-sub">
-      <span class="gain-color">+<span id="lite-gain"> 0</span></span>
-      <span class="dep-color">−<span id="lite-dep"> 0</span></span>
+  <div class="card hero">
+    <div class="hero-label">Solde du jour</div>
+    <div class="hero-solde" id="lite-solde">0 F</div>
+    <div class="hero-tiles">
+      <div class="hero-tile">Entrées<b class="hero-gain">+<span id="lite-gain"> 0</span></b></div>
+      <div class="hero-tile">Dépenses<b class="hero-dep">−<span id="lite-dep"> 0</span></b></div>
     </div>
-    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--text-3);display:flex;justify-content:space-between;gap:12px;text-align:left">
-      <span id="lite-month-label">Ce mois-ci<br><b id="lite-month" style="font-size:15px"></b></span>
-      <span style="text-align:right"><span id="lite-global-label">Solde global cumulé</span><br><b id="lite-global" style="font-size:15px"></b>
-        <br><span id="lite-global-sub" style="font-size:11px"></span>
-        <br><button type="button" class="btn btn-sm" onclick="startCheckpoint()" style="min-height:32px;padding:4px 12px;margin-top:6px;font-size:12.5px">⚖️ Pointer mon solde</button></span>
+    <div class="hero-foot">
+      <span id="lite-month-label">Ce mois-ci<br><b id="lite-month"></b></span>
+      <span style="text-align:right"><span id="lite-global-label">Solde global cumulé</span><br><b id="lite-global"></b>
+        <br><span id="lite-global-sub" style="font-size:11px"></span></span>
     </div>
   </div>
 
   <div class="card">
-    <div style="font-size:12px;color:var(--text-3);margin-bottom:8px">Tape l'entrée et appuie sur Entrée<br>Pour une date passée, ajoute-la à la fin : <code>hier</code>, <code>lundi</code>, <code>12/08</code></div>
-    <input type="text" id="hero-input" placeholder="ex: Bière -3000  ou  Salaire +580000" autocomplete="off">
+    <label for="hero-input" style="margin:0 0 10px;font-size:15px;font-weight:650;letter-spacing:0;text-transform:none;color:var(--text)">Nouvelle entrée</label>
+    <div class="hero-row">
+      <input type="text" id="hero-input" placeholder="ex: Taxi -2000  ou  Salaire +580000" autocomplete="off">
+      <button type="button" class="add-btn" onclick="saveHero('hero-input', 'hero-msg', 'hero-preview')" aria-label="Ajouter l'entrée">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
     <div id="shortcuts-lite" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
     <div id="hero-preview" style="font-size:12px;color:var(--text-3);margin-top:8px;min-height:16px"></div>
     <div id="hero-msg" style="font-size:13px;margin-top:2px;min-height:18px"></div>
+    <div style="font-size:12px;color:var(--text-3)">Date passée : ajoute-la à la fin, <code>hier</code>, <code>lundi</code>, <code>12/08</code></div>
+    <button type="button" class="link-btn" onclick="setMode('pro');proTab('saisie')">Saisie avancée →</button>
   </div>
 
   <div class="card card-flat" id="lite-budget-widget" style="display:none">
@@ -592,28 +652,30 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 
   <div class="card">
-    <div style="font-size:13px;font-weight:600;margin-bottom:10px" id="lite-donut-title">Dépenses du mois</div>
-    <div style="position:relative;height:220px"><canvas id="lite-donut"></canvas></div>
+    <div class="section-title">Aujourd'hui</div>
+    <div class="entry-list" id="lite-list"></div>
   </div>
 
   <div class="card">
-    <div style="font-size:13px;font-weight:600;margin-bottom:10px">Entrées du jour</div>
-    <div class="entry-list" id="lite-list"></div>
+    <div class="section-title" id="lite-donut-title">Dépenses du mois</div>
+    <div style="position:relative;height:220px"><canvas id="lite-donut"></canvas></div>
   </div>
 </div>
 
 <div id="mode-pro" style="display:none">
-  <div class="tabs">
-    <button class="tab active" data-tab="saisie" onclick="proTab('saisie')">Saisie</button>
-    <button class="tab" data-tab="previsions" onclick="proTab('previsions')">Prévu</button>
-    <button class="tab" data-tab="jour" onclick="proTab('jour')">Jour</button>
-    <button class="tab" data-tab="mois" onclick="proTab('mois')">Mois</button>
-    <button class="tab" data-tab="annee" onclick="proTab('annee')">Année</button>
-    <button class="tab" data-tab="budgets" onclick="proTab('budgets')">Budgets</button>
-    <button class="tab" data-tab="export" onclick="proTab('export')">Export</button>
+  <!-- Jour / Mois / Annee partagent l'entree « Bilan » de la barre du bas :
+       ce selecteur n'apparait que sur ces trois sections (voir updateNav). -->
+  <div id="bilan-head" style="display:none">
+    <h1 class="page-title">Bilan</h1>
+    <div class="seg" role="tablist" aria-label="Période">
+      <button type="button" class="seg-btn" role="tab" data-tab="jour" onclick="proTab('jour')">Jour</button>
+      <button type="button" class="seg-btn" role="tab" data-tab="mois" onclick="proTab('mois')">Mois</button>
+      <button type="button" class="seg-btn" role="tab" data-tab="annee" onclick="proTab('annee')">Année</button>
+    </div>
   </div>
 
   <div class="pro-section active" id="pro-saisie">
+    <h1 class="page-title">Saisie avancée</h1>
     <div class="card">
       <input type="text" id="hero-input-pro" placeholder="ex: Bière -3000  ou  Salaire +580000" autocomplete="off" style="margin-bottom:8px">
       <div id="shortcuts-pro" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
@@ -702,6 +764,7 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 
   <div class="pro-section" id="pro-previsions">
+    <h1 class="page-title">Prévu</h1>
     <div class="card">
       <div class="section-title">Dépenses / gains prévus</div>
       <label>Date de départ</label>
@@ -753,17 +816,17 @@ details[open] summary::after{transform:rotate(-135deg)}
     </div>
     <div class="metric-grid" id="month-metrics"></div>
     <div class="card">
+      <div class="section-title">Évolution du solde</div>
+      <div style="position:relative;height:200px"><canvas id="balance-chart"></canvas></div>
+    </div>
+    <div class="card">
       <div class="section-title">Moyennes</div>
       <div id="month-avg" style="font-size:13px;line-height:1.6"></div>
       <button class="btn btn-sm" id="month-bilan-btn" onclick="showBilan(currentMonthKey())" style="width:100%;margin-top:12px;display:none">📊 Bilan de ce mois</button>
     </div>
     <div class="card">
-      <div class="section-title">Répartition des dépenses</div>
+      <div class="section-title">Où va l'argent</div>
       <div style="position:relative;height:220px"><canvas id="month-donut"></canvas></div>
-    </div>
-    <div class="card">
-      <div class="section-title">Évolution du solde</div>
-      <div style="position:relative;height:200px"><canvas id="balance-chart"></canvas></div>
     </div>
     <div class="card">
       <div class="section-title">Gains / Dépenses par jour</div>
@@ -809,6 +872,7 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 
   <div class="pro-section" id="pro-budgets">
+    <h1 class="page-title">Budgets</h1>
     <div class="card">
       <div class="section-title">Budgets mensuels — <span id="budget-month-label"></span></div>
       <div id="budget-alerts"></div>
@@ -817,6 +881,7 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 
   <div class="pro-section" id="pro-export">
+    <h1 class="page-title">Plus</h1>
     <!-- Revision des entrees anterieures au correctif du signe (12/08/2026).
          Cette carte reste invisible tant que findSuspects() ne trouve rien,
          et disparait definitivement une fois la revision close. -->
@@ -928,6 +993,24 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 </div>
 
+<nav class="bottom-nav" aria-label="Navigation principale">
+  <button type="button" class="nav-btn" data-nav="accueil" onclick="goNav('accueil')">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Accueil
+  </button>
+  <button type="button" class="nav-btn" data-nav="prevu" onclick="goNav('prevu')">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Prévu
+  </button>
+  <button type="button" class="nav-btn" data-nav="bilan" onclick="goNav('bilan')">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Bilan
+  </button>
+  <button type="button" class="nav-btn" data-nav="budgets" onclick="goNav('budgets')">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/></svg>Budgets
+  </button>
+  <button type="button" class="nav-btn" data-nav="plus" onclick="goNav('plus')">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>Plus
+  </button>
+</nav>
+
 <script>
 /*!
  * Chart.js v4.4.1
@@ -961,7 +1044,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v13';
+var APP_VERSION = 'v14';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -970,6 +1053,37 @@ var CAT_COLORS = {
   'Éducation':'#3E7CB1','Famille & fêtes':'#B5568F','Soins & services':'#6D8299','Extra':'#9C3D54',
   'Salaire':'#1D9E75','Vente':'#26C293','Remboursement':'#5FB98E','Bonus':'#3BA378','Investissement':'#2E8B6A'
 };
+/* Icones des categories dans les listes : traits SVG plutot qu'emojis, dont le
+   rendu change d'un telephone a l'autre. CAT_ICONS (emojis) reste pour le texte. */
+var CAT_SVG = {
+  'Achat':'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/>',
+  'Alimentation':'<path d="M4 3v8a3 3 0 0 0 6 0V3M7 3v18M17 3c-2 0-3 3-3 7h3v11"/>',
+  'Transport':'<path d="M5 17h14M5 17v2M19 17v2M3 13l2-6h14l2 6v4H3zM7 13h.01M17 13h.01"/>',
+  'Logement':'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>',
+  'Santé':'<path d="M12 20s-7-4.5-9-9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c-2 4.5-9 9-9 9z"/>',
+  'Communication':'<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
+  'Loisirs':'<path d="M12 3l2.7 5.5 6 .9-4.4 4.3 1 6L12 16.9l-5.3 2.8 1-6-4.4-4.3 6-.9z"/>',
+  'Fournitures':'<path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/>',
+  'Matières premières':'<path d="M5 19c0-8 6-14 15-14 0 9-6 15-14 15M5 19l7-7"/>',
+  'Prêts/Emprunts':'<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>',
+  'Impôts':'<path d="M3 21h18M5 21V10M19 21V10M9 21V10M15 21V10M2 10l10-6 10 6z"/>',
+  'Autre':'<circle cx="12" cy="12" r="8"/><path d="M12 12h.01"/>',
+  'Éducation':'<path d="M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5"/>',
+  'Famille & fêtes':'<path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9C10 5 6 5 6 8s6 1 6 1 6 2 6-1-4-3-6 1"/>',
+  'Soins & services':'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.2 8.2L20 18M8.2 15.8L20 6"/>',
+  'Extra':'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+  'Salaire':'<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M8 8V5h8v3M3 13h18"/>',
+  'Vente':'<path d="M5 8h14l-1 13H6zM9 8V6a3 3 0 0 1 6 0v2"/>',
+  'Remboursement':'<path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  'Bonus':'<path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9C10 5 6 5 6 8s6 1 6 1 6 2 6-1-4-3-6 1"/>',
+  'Investissement':'<path d="M3 17l6-6 4 4 8-8M15 7h6v6"/>'
+};
+function catIcon(cat, size){
+  var col = CAT_COLORS[cat] || '#999999';
+  if(col.length === 4) col = '#' + col[1] + col[1] + col[2] + col[2] + col[3] + col[3];
+  return '<span class="cat-ico' + (size ? ' ' + size : '') + '" style="color:' + col + ';background:' + col + '24" aria-hidden="true">' +
+    '<svg viewBox="0 0 24 24">' + (CAT_SVG[cat] || CAT_SVG['Autre']) + '</svg></span>';
+}
 /* ---------- couleurs pilotees par la feuille de style ----------
    Un seul endroit lit les jetons CSS ; le reste du script ne connait que
    THEME, GAIN_COL, DEP_COL et NEUTRAL. Chart.js n'ayant aucune notion de
@@ -1680,11 +1794,10 @@ function renderEntryList(id, arr){
   if(!el) return;
   if(!arr.length){ el.innerHTML = '<div class="empty">Aucune entrée</div>'; return; }
   el.innerHTML = arr.map(function(e){
-    return '<div class="entry-item" id="entry-' + e.id + '">' +
+    return '<div class="entry-item" id="entry-' + e.id + '">' + catIcon(e.cat) +
       '<div class="entry-meta">' +
-        '<span class="badge ' + (e.type === 'gain' ? 'badge-gain' : 'badge-dep') + '">' + (e.type === 'gain' ? 'GAIN' : 'DÉP') + '</span>' +
-        '<span style="font-size:13px">' + (CAT_ICONS[e.cat] || '') + ' ' + esc(e.cat) + (e.desc ? ' · ' + esc(e.desc) : '') + '</span>' +
-        '<div class="entry-cat">' + fmtDateRel(e.date) + '</div>' +
+        '<div class="entry-title">' + esc(e.desc || e.cat) + '</div>' +
+        '<div class="entry-cat">' + (e.desc ? esc(e.cat) + ' · ' : '') + fmtDateRel(e.date) + '</div>' +
       '</div>' +
       '<span class="entry-amount ' + (e.type === 'gain' ? 'gain-color' : 'dep-color') + '" title="' + fmt(e.amount) + '">' + (e.type === 'gain' ? '+' : '-') + fmtShort(e.amount) + '</span>' +
       '<button class="btn btn-sm" onclick="openEdit(' + e.id + ')">✎</button>' +
@@ -1720,8 +1833,8 @@ function renderCatBars(id, bd, color, filter, type){
         reopenRowId = rowId;
       }
     }
-    return '<div class="cat-row"' + openAttr + '>' +
-      '<div class="cat-name">' + (CAT_ICONS[cat] || '') + ' ' + esc(cat) + '</div>' +
+    return '<div class="cat-row"' + openAttr + '>' + catIcon(cat, 'sm') +
+      '<div class="cat-name">' + esc(cat) + '</div>' +
       '<div class="cat-bar"><div class="cat-bar-fill" style="width:' + (amt/max*100).toFixed(1) + '%;background:' + (CAT_COLORS[cat] || color) + '"></div></div>' +
       '<div class="cat-amount">' + fmtShort(amt) + '<div style="font-size:10.5px;color:var(--text-3);font-weight:600">' + ((amt/total)*100).toFixed(0) + '%</div></div>' +
     '</div>' + drillDiv;
@@ -2492,7 +2605,10 @@ function renderLite(){
   var g = sumType(arr, 'gain'), d = sumType(arr, 'depense'), sol = g - d;
   var sEl = document.getElementById('lite-solde');
   sEl.textContent = (sol >= 0 ? '+' : '') + fmt(sol);
-  sEl.className = 'lite-solde ' + (sol >= 0 ? 'sol-pos' : 'sol-neg');
+  sEl.className = 'hero-solde' + (sol < 0 ? ' neg' : '');
+  /* La carte du solde est sombre dans les deux themes : ses couleurs ont leurs
+     propres jetons, plus clairs que GAIN_COL / DEP_COL. */
+  var HG = cssVar('--hero-gain', '#5FD3A6'), HD = cssVar('--hero-dep', '#FF9A6B');
   document.getElementById('lite-gain').textContent = ' ' + fmt(g);
   document.getElementById('lite-dep').textContent = ' ' + fmt(d);
   /* Cumul du mois : l'horizon d'un budget, absent entre le solde du jour et
@@ -2501,7 +2617,7 @@ function renderLite(){
   var ms = sumType(mArr, 'gain') - sumType(mArr, 'depense');
   var mEl = document.getElementById('lite-month');
   mEl.textContent = (ms >= 0 ? '+' : '') + fmt(ms);
-  mEl.style.color = ms >= 0 ? GAIN_COL : DEP_COL;
+  mEl.style.color = ms >= 0 ? HG : HD;
   document.getElementById('lite-month-label').firstChild.textContent =
     MONTHS[new Date(t + 'T12:00').getMonth()];
 
@@ -2514,17 +2630,17 @@ function renderLite(){
   if(est !== null){
     gLab.textContent = 'Solde réel estimé';
     gEl.textContent = fmt(est);
-    gEl.style.color = est >= 0 ? THEME.text : DEP_COL;
+    gEl.style.color = est >= 0 ? cssVar('--hero-text', '#FFFFFF') : HD;
     var age = daysBetween(cp.date, t);
     gSub.textContent = age === 0 ? 'pointé aujourd\'hui' : 'pointé il y a ' + age + ' j';
-    gSub.style.color = age >= 7 ? THEME.warn : THEME.text3;   // au-dela d'une semaine, l'estimation derive
+    gSub.style.color = age >= 7 ? cssVar('--hero-warn', '#F2B866') : '';   // au-dela d'une semaine, l'estimation derive
   } else {
     var gs = sumType(entries, 'gain') - sumType(entries, 'depense');
     gLab.textContent = 'Solde global cumulé';
     gEl.textContent = (gs >= 0 ? '+' : '') + fmt(gs);
-    gEl.style.color = gs >= 0 ? GAIN_COL : DEP_COL;
+    gEl.style.color = gs >= 0 ? HG : HD;
     gSub.textContent = 'depuis la 1re saisie';
-    gSub.style.color = THEME.text3;
+    gSub.style.color = '';
   }
   renderEntryList('lite-list', arr);
   renderLiteBudgetWidget();
@@ -2993,9 +3109,14 @@ function renderBudgets(){
     var b = budgets[c] || 0, s = spent[c] || 0;
     var p = b > 0 ? Math.min((s / b) * 100, 100) : 0;
     var col = b === 0 ? NEUTRAL : (s > b ? DEP_COL : (s / b > .8 ? THEME.warn : GAIN_COL));
+    var etat = b === 0 ? 'Aucun plafond'
+      : s > b ? 'Dépassé de ' + fmt(s - b)
+      : s / b > .8 ? 'Attention : ' + ((s / b) * 100).toFixed(0) + ' % utilisés'
+      : 'Dans les clous';
     return '<div class="budget-row">' +
-      '<div class="budget-header"><span><b>' + (CAT_ICONS[c] || '') + ' ' + c + '</b></span>' +
-      '<span style="font-size:12px">' + fmtShort(s) + ' / ' + (b > 0 ? fmtShort(b) : '—') + '</span></div>' +
+      '<div class="budget-header">' + catIcon(c) +
+        '<div class="budget-name"><b>' + esc(c) + '</b><div class="budget-status" style="color:' + col + '">' + etat + '</div></div>' +
+        '<div class="budget-amt"><b>' + fmtShort(s) + '</b><div>' + (b > 0 ? 'sur ' + fmtShort(b) : '—') + '</div></div></div>' +
       '<div class="budget-bar"><div class="budget-bar-fill" style="width:' + p + '%;background:' + col + '"></div></div>' +
       '<div class="budget-input-row"><input type="number" min="0" placeholder="Plafond" value="' + (b || '') + '" id="budget-' + c + '">' +
       '<button class="btn btn-sm" onclick="setBudget(\'' + c + '\')">OK</button></div></div>';
@@ -3349,8 +3470,6 @@ function confirmClearAll(){
 /* ---------- navigation + init ---------- */
 function setMode(m){
   mode = m;
-  document.getElementById('btn-lite').classList.toggle('active', m === 'lite');
-  document.getElementById('btn-pro').classList.toggle('active', m === 'pro');
   document.getElementById('mode-lite').style.display = m === 'lite' ? 'block' : 'none';
   document.getElementById('mode-pro').style.display = m === 'pro' ? 'block' : 'none';
   saveMode();
@@ -3360,12 +3479,47 @@ function proTab(id){
   currentProTab = id;
   /* était apparié par position à un tableau codé en dur : cassait en silence dès qu'un
      onglet changeait de place. */
-  var tabs = document.querySelectorAll('.tab');
-  for(var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === id);
+  var tabs = document.querySelectorAll('.seg-btn');
+  for(var i = 0; i < tabs.length; i++){
+    var on = tabs[i].getAttribute('data-tab') === id;
+    tabs[i].classList.toggle('active', on);
+    tabs[i].setAttribute('aria-selected', on ? 'true' : 'false');
+  }
   var secs = document.querySelectorAll('.pro-section');
   for(var j = 0; j < secs.length; j++) secs[j].classList.remove('active');
   document.getElementById('pro-' + id).classList.add('active');
+  updateNav();
   renderCurrentProTab();
+}
+/* Barre du bas : 5 entrees pour les 7 sections. Accueil = ecran Lite (et la
+   saisie avancee qui en part), Bilan = Jour / Mois / Annee. */
+var NAV_TABS = { prevu: 'previsions', budgets: 'budgets', plus: 'export' };
+var BILAN_TABS = ['jour', 'mois', 'annee'];
+function navKey(){
+  if(mode === 'lite' || currentProTab === 'saisie') return 'accueil';
+  if(BILAN_TABS.indexOf(currentProTab) !== -1) return 'bilan';
+  for(var k in NAV_TABS) if(NAV_TABS[k] === currentProTab) return k;
+  return 'accueil';
+}
+function updateNav(){
+  var k = navKey();
+  var btns = document.querySelectorAll('.nav-btn');
+  for(var i = 0; i < btns.length; i++){
+    var on = btns[i].getAttribute('data-nav') === k;
+    btns[i].classList.toggle('active', on);
+    if(on) btns[i].setAttribute('aria-current', 'page'); else btns[i].removeAttribute('aria-current');
+  }
+  var head = document.getElementById('bilan-head');
+  if(head) head.style.display = (mode === 'pro' && k === 'bilan') ? 'block' : 'none';
+}
+function goNav(k){
+  if(k === 'accueil'){ setMode('lite'); window.scrollTo(0, 0); return; }
+  var tab = k === 'bilan'
+    ? (BILAN_TABS.indexOf(currentProTab) !== -1 ? currentProTab : 'mois')
+    : NAV_TABS[k];
+  if(mode !== 'pro') setMode('pro');
+  proTab(tab);
+  window.scrollTo(0, 0);
 }
 function renderCurrentProTab(){
   var id = currentProTab;
@@ -3420,6 +3574,7 @@ function renderAll(){
      rendu avec les couleurs de l'autre theme est bien plus visible qu'un
      getComputedStyle de plus. */
   readTheme();
+  updateNav();
   var ver = document.getElementById('app-version');
   if(ver) ver.textContent = 'Version ' + APP_VERSION;
   renderBackupReminder();
