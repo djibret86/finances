@@ -901,8 +901,17 @@ details[open] summary::after{transform:rotate(-135deg)}
     <h1 class="page-title">Budgets</h1>
     <div class="card">
       <div class="section-title">Budgets mensuels — <span id="budget-month-label"></span></div>
-      <div id="budget-alerts"></div>
+      <div id="budget-summary" style="font-size:13px;color:var(--text-3);margin:-6px 0 10px"></div>
       <div id="budget-list"></div>
+    </div>
+    <div class="card">
+      <div class="section-title">Ajouter un budget</div>
+      <div class="budget-input-row" style="flex-wrap:wrap">
+        <select id="budget-new-cat" style="flex:1 1 140px;min-width:0;min-height:40px;padding:9px 32px 9px 12px;font-size:16px;border-radius:11px"></select>
+        <input type="number" id="budget-new-amount" min="0" placeholder="Plafond / mois" style="flex:1 1 110px">
+        <button class="btn btn-primary btn-sm" onclick="addBudget()">Ajouter</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:8px">Pour retirer un budget, mets son plafond à 0.</div>
     </div>
   </div>
 
@@ -951,6 +960,7 @@ details[open] summary::after{transform:rotate(-135deg)}
 
     <div class="card">
       <div class="section-title">Export & sauvegarde</div>
+      <div id="last-backup" style="font-size:13px;color:var(--text-3);margin:-6px 0 12px"></div>
       <!-- Revele par initUI() uniquement si le partage de fichier existe, sinon
            ce bouton ferait doublon avec le telechargement juste en dessous. -->
       <button class="btn btn-primary" id="btn-share-backup" onclick="shareBackup()" style="width:100%;margin-bottom:8px;display:none">📤 Envoyer la sauvegarde</button>
@@ -1080,7 +1090,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v15';
+var APP_VERSION = 'v16';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Alcool':'#A23B5A','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -3260,20 +3270,24 @@ function renderBudgets(){
   arr.filter(function(e){ return e.type === 'depense'; }).forEach(function(e){
     spent[e.cat] = (spent[e.cat] || 0) + e.amount;
   });
-  var alerts = [];
-  CATS.depense.forEach(function(c){
-    var b = budgets[c], s = spent[c] || 0;
-    if(b && b > 0){
-      var p = (s / b) * 100;
-      if(p >= 100) alerts.push({ msg: c + ' : budget dépassé (' + fmt(s) + ' / ' + fmt(b) + ')', type: 'danger' });
-      else if(p >= 80) alerts.push({ msg: c + ' : ' + p.toFixed(0) + '% du budget', type: 'warn' });
-    }
-  });
-  document.getElementById('budget-alerts').innerHTML = alerts.map(function(a){
-    return '<div class="alert alert-' + a.type + '">' + a.msg + '</div>';
-  }).join('');
   var reopen = null;
-  document.getElementById('budget-list').innerHTML = CATS.depense.map(function(c, i){
+  /* Seules les categories qui ont un plafond s'affichent : dix-sept lignes dont
+     quatorze vides noyaient les quelques budgets reels. Les autres se proposent
+     dans « Ajouter un budget ». */
+  var avec = CATS.depense.filter(function(c){ return budgets[c] > 0; });
+  var sans = CATS.depense.filter(function(c){ return !(budgets[c] > 0); });
+  var sel = document.getElementById('budget-new-cat');
+  if(sel) sel.innerHTML = sans.map(function(c){ return '<option>' + esc(c) + '</option>'; }).join('');
+  var totB = avec.reduce(function(t, c){ return t + budgets[c]; }, 0);
+  var totS = avec.reduce(function(t, c){ return t + (spent[c] || 0); }, 0);
+  document.getElementById('budget-summary').textContent = avec.length
+    ? fmt(totS) + ' dépensés sur ' + fmt(totB) + ' · touche une ligne pour voir ses dépenses'
+    : '';
+  if(!avec.length){
+    document.getElementById('budget-list').innerHTML = '<div class="empty">Aucun budget pour l\'instant.<br>Ajoute-en un ci-dessous.</div>';
+    return;
+  }
+  document.getElementById('budget-list').innerHTML = avec.map(function(c, i){
     var b = budgets[c] || 0, s = spent[c] || 0;
     var p = b > 0 ? Math.min((s / b) * 100, 100) : 0;
     var col = b === 0 ? NEUTRAL : (s > b ? DEP_COL : (s / b > .8 ? THEME.warn : GAIN_COL));
@@ -3287,13 +3301,22 @@ function renderBudgets(){
     return '<div class="budget-row">' +
       '<div class="budget-header" onclick="toggleCatDrill(\'' + rowId + '\')" style="cursor:pointer" title="Voir les dépenses du mois">' + catIcon(c) +
         '<div class="budget-name"><b>' + esc(c) + '</b><div class="budget-status" style="color:' + col + '">' + etat + '</div></div>' +
-        '<div class="budget-amt"><b>' + fmtShort(s) + '</b><div>' + (b > 0 ? 'sur ' + fmtShort(b) : '—') + '</div></div></div>' +
+        '<div class="budget-amt"><b>' + fmt(s) + '</b><div>sur ' + fmt(b) + '</div></div></div>' +
       '<div class="budget-bar"><div class="budget-bar-fill" style="width:' + p + '%;background:' + col + '"></div></div>' +
       '<div class="entry-list" id="' + rowId + '" style="display:none;margin-bottom:8px"></div>' +
       '<div class="budget-input-row"><input type="number" min="0" placeholder="Plafond" value="' + (b || '') + '" id="budget-' + c + '">' +
       '<button class="btn btn-sm" onclick="setBudget(\'' + c + '\')">OK</button></div></div>';
   }).join('');
   if(reopen) openCatDrill(reopen);
+}
+function addBudget(){
+  var c = document.getElementById('budget-new-cat').value;
+  var v = parseFloat(document.getElementById('budget-new-amount').value);
+  if(!c || CATS.depense.indexOf(c) === -1) return;
+  if(isNaN(v) || v <= 0){ uiAlert('Indique un plafond mensuel supérieur à 0.'); return; }
+  budgets[c] = v;
+  document.getElementById('budget-new-amount').value = '';
+  saveBudgets().then(renderBudgets);
 }
 function setBudget(c){
   var v = parseFloat(document.getElementById('budget-' + c).value);
@@ -3336,7 +3359,7 @@ function backupBlob(){
 function backupName(){ return 'finances_backup_' + today() + '.json'; }
 function markBackedUp(){
   lastBackup = today();
-  return storageSet('budget_last_backup', lastBackup).then(renderBackupReminder);
+  return storageSet('budget_last_backup', lastBackup).then(function(){ renderBackupReminder(); renderLastBackup(); });
 }
 function exportJSON(){
   downloadBlob(backupBlob(), backupName());
@@ -3374,8 +3397,12 @@ function shareBackup(){
 /* ---------- rappel de sauvegarde ----------
    Les donnees sont en localStorage, separees entre le telephone et le PC :
    un vidage du cache Chrome les emporte. L'export JSON est le seul filet,
-   donc on le rappelle au bout de BACKUP_DAYS jours — et jamais autrement. */
-var BACKUP_DAYS = 30;
+   donc on le rappelle au bout de BACKUP_DAYS jours — et jamais autrement.
+   30 jours, c'etait un mois de saisies perdu avec le telephone : on passe a une
+   semaine. « Plus tard » ne repousse que de SNOOZE_DAYS, sinon le rappel
+   hebdomadaire se taisait aussi longtemps qu'il y avait de jours entre deux. */
+var BACKUP_DAYS = 7;
+var SNOOZE_DAYS = 2;
 function daysBetween(a, b){
   return Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 86400000);
 }
@@ -3418,12 +3445,22 @@ function renderBackupReminder(){
   if(age < BACKUP_DAYS){ el.style.display = 'none'; return; }
 
   el.style.display = 'flex';
-  document.getElementById('backup-reminder-text').innerHTML = lastBackup
+  document.getElementById('backup-reminder-text').innerHTML = (lastBackup
     ? '💾 Sauvegarde vieille de <b>' + age + ' jours</b>'
-    : '💾 <b>Jamais sauvegardé</b> · ' + entries.length + ' entrées';
+    : '💾 <b>Jamais sauvegardé</b> · ' + entries.length + ' entrées') +
+    '<br><span style="font-size:12px;font-weight:500">Envoie-la sur WhatsApp ou Drive : elle survivra à la perte du téléphone.</span>';
+}
+/* Rappel discret dans « Plus » : la date de la derniere sauvegarde, toujours visible. */
+function renderLastBackup(){
+  var el = document.getElementById('last-backup');
+  if(!el) return;
+  if(!lastBackup){ el.textContent = 'Aucune sauvegarde pour l\'instant.'; el.style.color = DEP_COL; return; }
+  var age = daysBetween(lastBackup, today());
+  el.textContent = 'Dernière sauvegarde : ' + (age === 0 ? 'aujourd\'hui' : age === 1 ? 'hier' : 'il y a ' + age + ' jours');
+  el.style.color = age >= BACKUP_DAYS ? DEP_COL : '';
 }
 function snoozeBackup(){
-  snoozeUntil = addDays(today(), BACKUP_DAYS);
+  snoozeUntil = addDays(today(), SNOOZE_DAYS);
   storageSet('budget_backup_snooze', snoozeUntil).then(renderBackupReminder);
 }
 function isValidEntry(e){
@@ -3702,7 +3739,7 @@ function renderCurrentProTab(){
   else if(id === 'mois') renderMonth();
   else if(id === 'annee') renderYear();
   else if(id === 'budgets') renderBudgets();
-  else if(id === 'export'){ renderReclass(); renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
+  else if(id === 'export'){ renderLastBackup(); renderReclass(); renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
 }
 function populateSelects(){
   var now = new Date(), cy = now.getFullYear();

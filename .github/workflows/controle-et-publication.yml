@@ -46,6 +46,9 @@ jobs:
       - name: Test réel dans le navigateur (format téléphone, hors ligne)
         run: node controle/tester-navigateur.mjs
 
+      - name: Test des calculs (saisies, dates, catégories, totaux, budgets)
+        run: node controle/tester-calculs.mjs
+
   publication:
     name: Mise en ligne
     needs: controle
