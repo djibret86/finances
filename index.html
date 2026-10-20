@@ -161,7 +161,13 @@ body{
 }
 .hero-solde.neg{color:var(--hero-dep)}
 .hero-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.hero-tile{background:var(--hero-tile);border-radius:16px;padding:12px 14px;font-size:12px;color:var(--hero-sub)}
+.hero-tile{
+  display:block;width:100%;text-align:left;font-family:inherit;cursor:pointer;
+  background:var(--hero-tile);border:none;border-radius:16px;padding:12px 14px;font-size:12px;color:var(--hero-sub);
+  transition:transform .12s var(--ease),box-shadow .18s var(--ease);
+}
+.hero-tile:active{transform:scale(.97)}
+.hero-tile.open{box-shadow:0 0 0 2px var(--hero-sub)}
 .hero-tile b{display:block;margin-top:2px;font-size:17px;font-weight:650;white-space:nowrap}
 .hero-gain{color:var(--hero-gain)}
 .hero-dep{color:var(--hero-dep)}
@@ -187,6 +193,11 @@ body{
 .link-btn{
   min-height:44px;padding:0;border:none;background:none;
   font-family:inherit;font-size:14px;font-weight:600;color:var(--sol);cursor:pointer;
+}
+
+.banner-btn{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;
+  font-family:inherit;font-size:13px;color:var(--text);text-align:left;cursor:pointer;
 }
 
 /* ---------- Icones de categorie -------------------------- */
@@ -292,6 +303,15 @@ details[open] summary::after{transform:rotate(-135deg)}
 .metric-sol .metric-value{color:var(--hero-text)}
 .metric-sol.neg .metric-value{color:var(--hero-dep)}
 .metric-label{font-size:12px;font-weight:500;color:var(--text-3);margin-bottom:4px}
+.metric-btn{
+  display:block;width:100%;text-align:left;font-family:inherit;cursor:pointer;
+  transition:transform .12s var(--ease),box-shadow .18s var(--ease);
+}
+.metric-btn:active{transform:scale(.97)}
+.metric-btn .metric-label::after{content:" ›";opacity:.7}
+.metric-btn.open{box-shadow:0 0 0 2px var(--sol)}
+.metric-btn.open .metric-label::after{content:" ⌄"}
+.metric-detail{animation:sectionIn .22s var(--ease) both}
 .metric-value{font-size:19px;font-weight:800;letter-spacing:-.015em}
 
 .gain-color{color:var(--gain-strong)}
@@ -613,8 +633,8 @@ details[open] summary::after{transform:rotate(-135deg)}
     <div class="hero-label">Solde du jour</div>
     <div class="hero-solde" id="lite-solde">0 F</div>
     <div class="hero-tiles">
-      <div class="hero-tile">Entrées<b class="hero-gain">+<span id="lite-gain"> 0</span></b></div>
-      <div class="hero-tile">Dépenses<b class="hero-dep">−<span id="lite-dep"> 0</span></b></div>
+      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="gain" aria-expanded="false" onclick="toggleMetric('lite-hero', 'gain')">Entrées ›<b class="hero-gain">+<span id="lite-gain"> 0</span></b></button>
+      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="depense" aria-expanded="false" onclick="toggleMetric('lite-hero', 'depense')">Dépenses ›<b class="hero-dep">−<span id="lite-dep"> 0</span></b></button>
     </div>
     <div class="hero-foot">
       <span id="lite-month-label">Ce mois-ci<br><b id="lite-month"></b></span>
@@ -622,6 +642,8 @@ details[open] summary::after{transform:rotate(-135deg)}
         <br><span id="lite-global-sub" style="font-size:11px"></span></span>
     </div>
   </div>
+
+  <div id="lite-hero-detail"></div>
 
   <div class="card">
     <label for="hero-input" style="margin:0 0 10px;font-size:15px;font-weight:650;letter-spacing:0;text-transform:none;color:var(--text)">Nouvelle entrée</label>
@@ -643,6 +665,10 @@ details[open] summary::after{transform:rotate(-135deg)}
     <div style="font-size:22px;font-weight:600" id="lite-daily-budget"></div>
     <div style="font-size:11px;color:var(--text-3);margin-top:4px" id="lite-daily-detail"></div>
   </div>
+
+  <button type="button" class="card banner-btn" id="lite-reclass-banner" style="display:none" onclick="openReclass()">
+    <span id="lite-reclass-text"></span><span style="color:var(--text-3)">→</span>
+  </button>
 
   <div class="card" id="lite-planned-banner" style="display:none;cursor:pointer" onclick="setMode('pro');proTab('previsions')">
     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -885,6 +911,16 @@ details[open] summary::after{transform:rotate(-135deg)}
     <!-- Revision des entrees anterieures au correctif du signe (12/08/2026).
          Cette carte reste invisible tant que findSuspects() ne trouve rien,
          et disparait definitivement une fois la revision close. -->
+    <!-- Reclassement : regroupe les entrees « Autre » (et l'alcool encore range en
+         Alimentation) par mot, pour les classer d'un geste. Invisible s'il n'y a rien. -->
+    <div class="card" id="reclass-card" style="display:none">
+      <div class="section-title">Entrées à mieux classer</div>
+      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
+        Un choix s'applique à toutes les entrées du groupe, et l'app le retient pour les prochaines saisies.
+      </div>
+      <div id="reclass-list"></div>
+    </div>
+
     <div class="card" id="repair-card" style="display:none">
       <div class="section-title">🔎 Entrées à vérifier</div>
       <div id="repair-intro" style="font-size:13px;line-height:1.55;margin-bottom:12px"></div>
@@ -1033,7 +1069,7 @@ details[open] summary::after{transform:rotate(-135deg)}
 
 var CATS = {
   gain: ['Salaire','Vente','Remboursement','Bonus','Investissement','Autre'],
-  depense: ['Achat','Alimentation','Transport','Logement','Santé','Éducation','Famille & fêtes','Soins & services','Communication','Loisirs','Fournitures','Matières premières','Prêts/Emprunts','Impôts','Extra','Autre']
+  depense: ['Achat','Alimentation','Alcool','Transport','Logement','Santé','Éducation','Famille & fêtes','Soins & services','Communication','Loisirs','Fournitures','Matières premières','Prêts/Emprunts','Impôts','Extra','Autre']
 };
 var MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 /* Valeurs de repli : readTheme() les remplace par les jetons de la feuille
@@ -1044,10 +1080,10 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v14';
+var APP_VERSION = 'v15';
 
 var CAT_COLORS = {
-  'Achat':'#C1553F','Alimentation':'#E8794F','Transport':'#4A6FA5','Logement':'#8E6CB8',
+  'Achat':'#C1553F','Alimentation':'#E8794F','Alcool':'#A23B5A','Transport':'#4A6FA5','Logement':'#8E6CB8',
   'Santé':'#D14D72','Communication':'#3BA3A3','Loisirs':'#E5A341','Fournitures':'#7A9E5F',
   'Matières premières':'#5C8A3A','Prêts/Emprunts':'#B85C38','Impôts':'#8A6D5C','Autre':'#999',
   'Éducation':'#3E7CB1','Famille & fêtes':'#B5568F','Soins & services':'#6D8299','Extra':'#9C3D54',
@@ -1058,6 +1094,7 @@ var CAT_COLORS = {
 var CAT_SVG = {
   'Achat':'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/>',
   'Alimentation':'<path d="M4 3v8a3 3 0 0 0 6 0V3M7 3v18M17 3c-2 0-3 3-3 7h3v11"/>',
+  'Alcool':'<path d="M8 3h8l-.5 6a3.5 3.5 0 0 1-7 0zM12 12.5V20M8 21h8"/>',
   'Transport':'<path d="M5 17h14M5 17v2M19 17v2M3 13l2-6h14l2 6v4H3zM7 13h.01M17 13h.01"/>',
   'Logement':'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>',
   'Santé':'<path d="M12 20s-7-4.5-9-9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c-2 4.5-9 9-9 9z"/>',
@@ -1114,7 +1151,7 @@ function readTheme(){
   }
 }
 var CAT_ICONS = {
-  'Achat':'🧾','Alimentation':'🍽️','Transport':'🚗','Logement':'🏠','Santé':'⚕️',
+  'Achat':'🧾','Alimentation':'🍽️','Alcool':'🍺','Transport':'🚗','Logement':'🏠','Santé':'⚕️',
   'Communication':'📱','Loisirs':'🎮','Fournitures':'📦','Matières premières':'🌾',
   'Prêts/Emprunts':'💳','Impôts':'🏛️','Autre':'📌','Éducation':'🎓','Famille & fêtes':'🎉','Soins & services':'✂️','Extra':'⚡',
   'Salaire':'💼','Vente':'🛒','Remboursement':'↩️','Bonus':'🎁','Investissement':'📈'
@@ -1152,7 +1189,14 @@ var AUTO_CAT = {
     ['Famille & fêtes',['cérémonie','ceremonie','baptême','bapteme','mariage','décès','deces',
       'funéraille','funeraille','tontine','natt','zakat','sadaka','aumône','aumone','don','cadeau',
       'fête','fete','tabaski','korité','korite','ramadan','noël','noel','famille','parent','ndogou']],
-    ['Alimentation',['bière','biere','beer','vin','whisky','rhum','alcool','resto','restaurant','repas','nourriture','manger','déjeuner','diner','dîner','brunch','café','cafe','pain','marché','marche','super','supermarché','supermarche','boutique','shop','courses','food','snack','maquis','drink','boisson','eau','jus','oeuf','œuf','oeufs','lait','riz','attiéké','attieke','poulet','poisson','viande','légume','legume','fruit','tomate','oignon','banane','plantain','sucre','sel','huile','farine','yaourt','fromage','beurre','chocolat','biscuit','gâteau','gateau','bonbon',
+    /* L'alcool avait sa place dans Alimentation : on ne le distinguait pas d'un
+       repas. Les marques locales comptent autant que les mots generiques. « liqueur »
+       reste en Matieres premieres (achats de l'activite) ; « vin » commence aussi
+       « vinaigre », d'ou ce mot ajoute plus bas en Alimentation (le plus long gagne). */
+    ['Alcool',['bière','biere','beer','vin','whisky','rhum','alcool','vodka','champagne','pastis','cognac',
+      'apéro','apero','pinte','bangui','koutoukou','tchapalo','flag','castel','guinness','heineken',
+      '33 export','beaufort','tuborg','desperados','kronenbourg','hennessy','martini','baileys','jack daniel']],
+    ['Alimentation',['vinaigre','resto','restaurant','repas','nourriture','manger','déjeuner','diner','dîner','brunch','café','cafe','pain','marché','marche','super','supermarché','supermarche','boutique','shop','courses','food','snack','maquis','drink','boisson','eau','jus','oeuf','œuf','oeufs','lait','riz','attiéké','attieke','poulet','poisson','viande','légume','legume','fruit','tomate','oignon','banane','plantain','sucre','sel','huile','farine','yaourt','fromage','beurre','chocolat','biscuit','gâteau','gateau','bonbon',
       'tangana','dibiterie','gargotte','gargote','thiebou','ceebu','yassa','mafé','mafe','sandwich','chawarma','chawarma','fataya','ndambe',
       'thiakry','bissap jus','bouye','ditakh','arachide','mil','mais','maïs','manioc','patate','gombo','niebe','niébé','poivron','piment','ail','gingembre']],
     ['Transport',['taxi','transport','carburant','essence','gasoil','lavage','auto','voiture','bus','moto','parking','uber','yango','heetch','fret',
@@ -1407,6 +1451,80 @@ function renderRepair(){
       '<button class="btn btn-danger btn-sm" onclick="repairOne(' + e.id + ')" title="Convertir en dépense">→</button>' +
     '</div>';
   }).join('');
+}
+/* ---------- reclassement des entrees vagues ----------
+   « Autre » finit en fourre-tout : on y retrouve des dizaines de libelles qui
+   meritaient une vraie categorie. Plutot que de corriger ligne par ligne, on
+   regroupe par mot significatif (le meme que retient learnCat) : un choix classe
+   tout le groupe ET devient une regle. Deux sortes de groupes :
+   - une suggestion, quand les mots-cles actuels proposent mieux (entrees saisies
+     avant l'ajout d'un mot-cle, ou l'alcool range en Alimentation avant v15) ;
+   - un choix libre, quand rien ne permet de deviner.
+   Refuser une suggestion l'apprend aussi (learnCat vers la categorie actuelle) :
+   autoCat consulte d'abord les regles apprises, la suggestion ne revient donc pas. */
+function reclassGroups(){
+  var groups = {};
+  entries.forEach(function(e){
+    var w = motSignificatif(e.desc || '');
+    if(!w) return;                         // sans libelle exploitable, rien a regrouper
+    var sug = autoCat(String(e.desc).toLowerCase(), e.type);
+    var suggere = sug !== e.cat && (e.cat === 'Autre' || sug === 'Alcool') && CATS[e.type].indexOf(sug) !== -1;
+    if(!suggere && e.cat !== 'Autre') return;
+    if(!suggere && learnedCats[e.type + '|' + w] === 'Autre') return;   // garde en Autre volontairement
+    var k = e.type + '|' + e.cat + '|' + w;
+    var g = groups[k] || (groups[k] = { key: k, word: w, type: e.type, cat: e.cat, sug: suggere ? sug : null, ids: [], total: 0, desc: e.desc });
+    g.ids.push(e.id);
+    g.total += e.amount;
+  });
+  return Object.keys(groups).map(function(k){ return groups[k]; })
+    .sort(function(a, b){ return (b.sug ? 1 : 0) - (a.sug ? 1 : 0) || b.total - a.total; });
+}
+var RECLASS = {};   // cle de groupe -> groupe, pour les boutons
+function renderReclass(){
+  var card = document.getElementById('reclass-card');
+  if(!card) return;
+  var gs = reclassGroups();
+  if(!gs.length){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  RECLASS = {};
+  document.getElementById('reclass-list').innerHTML = gs.slice(0, 30).map(function(g, i){
+    RECLASS[i] = g;
+    var tete = '<div class="entry-item">' + catIcon(g.sug || g.cat) +
+      '<div class="entry-meta"><div class="entry-title">« ' + esc(g.word) + ' »</div>' +
+      '<div class="entry-cat">' + g.ids.length + ' entrée(s) · ' + fmt(g.total) + ' · en ' + esc(g.cat) + '</div></div>';
+    if(g.sug){
+      return tete + '</div><div style="display:flex;gap:8px;margin:0 0 10px 50px">' +
+        '<button class="btn btn-primary btn-sm" onclick="reclassApply(' + i + ', RECLASS[' + i + '].sug)">Passer en ' + esc(g.sug) + '</button>' +
+        '<button class="btn btn-sm" onclick="reclassApply(' + i + ', RECLASS[' + i + '].cat)">Laisser</button></div>';
+    }
+    return tete + '</div><div style="display:flex;gap:8px;margin:0 0 10px 50px">' +
+      '<select id="reclass-sel-' + i + '" style="flex:1;min-height:38px;padding:6px 32px 6px 10px;font-size:14px">' +
+        CATS[g.type].filter(function(c){ return c !== 'Autre'; }).map(function(c){ return '<option>' + esc(c) + '</option>'; }).join('') +
+      '</select>' +
+      '<button class="btn btn-primary btn-sm" onclick="reclassApply(' + i + ', document.getElementById(\'reclass-sel-' + i + '\').value)">Classer</button>' +
+      '<button class="btn btn-sm" onclick="reclassApply(' + i + ', \'Autre\')" title="Garder en Autre">Garder</button></div>';
+  }).join('') + (gs.length > 30 ? '<div style="font-size:12px;color:var(--text-3)">+ ' + (gs.length - 30) + ' autre(s) groupe(s) après ceux-ci.</div>' : '');
+}
+function reclassApply(i, cat){
+  var g = RECLASS[i];
+  if(!g || CATS[g.type].indexOf(cat) === -1) return;
+  entries.forEach(function(e){ if(g.ids.indexOf(e.id) !== -1) e.cat = cat; });
+  Promise.all([save(), learnCat(g.desc, g.type, cat)]).then(renderAll);
+}
+function reclassCount(){
+  return reclassGroups().reduce(function(s, g){ return s + g.ids.length; }, 0);
+}
+function openReclass(){
+  goNav('plus');
+  var c = document.getElementById('reclass-card');
+  if(c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function renderReclassBanner(){
+  var b = document.getElementById('lite-reclass-banner');
+  if(!b) return;
+  var n = reclassCount();
+  b.style.display = n ? 'flex' : 'none';
+  if(n) document.getElementById('lite-reclass-text').textContent = n + ' entrée(s) à mieux classer (Autre, alcool…)';
 }
 function convertToDepense(e){
   e.type = 'depense';
@@ -1778,16 +1896,62 @@ function catBreakdown(arr, t){
 }
 
 /* ---------- render helpers ---------- */
-function renderMetrics(id, g, d){
+/* `filter` (ex. { month: '2026-10' }) rend les trois chiffres cliquables : un
+   appui deplie juste dessous le detail de la periode (categories, puis entrees
+   d'une categorie). Sans filtre (previsions, bilan), ils restent de simples chiffres. */
+var METRIC_OPEN = {};     // id de la grille -> 'gain' | 'depense' | 'solde'
+var METRIC_FILTER = {};   // id de la grille -> filtre getEntries de la periode affichee
+function renderMetrics(id, g, d, filter){
   var el = document.getElementById(id);
   if(!el) return;
-  el.innerHTML = metricsHTML(g, d);
+  el.innerHTML = metricsHTML(g, d, filter ? id : null);
+  if(!filter) return;
+  METRIC_FILTER[id] = filter;
+  if(!document.getElementById(id + '-detail')){
+    var box = document.createElement('div');
+    box.id = id + '-detail';
+    el.parentNode.insertBefore(box, el.nextSibling);
+  }
+  renderMetricDetail(id);
 }
-function metricsHTML(g, d){
+function metricsHTML(g, d, id){
   var s = g - d;
-  return '<div class="metric metric-gain"><div class="metric-label">Gains</div><div class="metric-value">' + fmtShort(g) + '</div></div>' +
-    '<div class="metric metric-dep"><div class="metric-label">Dépenses</div><div class="metric-value">' + fmtShort(d) + '</div></div>' +
-    '<div class="metric metric-sol ' + (s < 0 ? 'neg' : '') + '"><div class="metric-label">Solde</div><div class="metric-value">' + (s >= 0 ? '+' : '') + fmtShort(s) + '</div></div>';
+  function cell(kind, cls, label, val){
+    if(!id) return '<div class="metric ' + cls + '"><div class="metric-label">' + label + '</div><div class="metric-value">' + val + '</div></div>';
+    var on = METRIC_OPEN[id] === kind;
+    return '<button type="button" class="metric metric-btn ' + cls + (on ? ' open' : '') + '" data-metric="' + id + '" data-kind="' + kind + '"' +
+      ' aria-expanded="' + on + '" onclick="toggleMetric(\'' + id + '\', \'' + kind + '\')">' +
+      '<div class="metric-label">' + label + '</div><div class="metric-value">' + val + '</div></button>';
+  }
+  return cell('gain', 'metric-gain', 'Gains', fmtShort(g)) +
+    cell('depense', 'metric-dep', 'Dépenses', fmtShort(d)) +
+    cell('solde', 'metric-sol' + (s < 0 ? ' neg' : ''), 'Solde', (s >= 0 ? '+' : '') + fmtShort(s));
+}
+function toggleMetric(id, kind){
+  METRIC_OPEN[id] = METRIC_OPEN[id] === kind ? null : kind;
+  var btns = document.querySelectorAll('[data-metric="' + id + '"]');
+  for(var i = 0; i < btns.length; i++){
+    var on = btns[i].getAttribute('data-kind') === METRIC_OPEN[id];
+    btns[i].classList.toggle('open', on);
+    btns[i].setAttribute('aria-expanded', on ? 'true' : 'false');
+  }
+  renderMetricDetail(id);
+}
+function renderMetricDetail(id){
+  var box = document.getElementById(id + '-detail');
+  if(!box) return;
+  var kind = METRIC_OPEN[id], f = METRIC_FILTER[id];
+  if(!kind || !f){ box.className = ''; box.innerHTML = ''; return; }
+  var arr = getEntries(f);
+  var titre = kind === 'gain' ? 'Détail des gains' : kind === 'depense' ? 'Détail des dépenses' : 'Toutes les entrées';
+  box.className = (box.parentNode.closest('.card') ? '' : 'card ') + 'metric-detail';
+  box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' +
+      '<div class="section-title" style="margin:0">' + titre + '</div>' +
+      '<button type="button" class="btn btn-sm" style="width:36px;padding:0" aria-label="Fermer le détail" onclick="toggleMetric(\'' + id + '\', \'' + kind + '\')">✕</button></div>' +
+    (kind === 'solde' ? '' : '<div style="font-size:12px;color:var(--text-3);margin-bottom:6px">Touche une catégorie pour voir ses entrées.</div>') +
+    '<div id="' + id + '-dl"' + (kind === 'solde' ? ' class="entry-list"' : '') + '></div>';
+  if(kind === 'solde') renderEntryList(id + '-dl', arr);
+  else renderCatBars(id + '-dl', catBreakdown(arr, kind), kind === 'gain' ? GAIN_COL : DEP_COL, f, kind);
 }
 function renderEntryList(id, arr){
   var el = document.getElementById(id);
@@ -2643,7 +2807,10 @@ function renderLite(){
     gSub.style.color = '';
   }
   renderEntryList('lite-list', arr);
+  METRIC_FILTER['lite-hero'] = { date: t };
+  renderMetricDetail('lite-hero');
   renderLiteBudgetWidget();
+  renderReclassBanner();
   var monthDeps = catBreakdown(getEntries({ month: t.slice(0,7) }), 'depense');
   var monthTotal = monthDeps.reduce(function(s, x){ return s + x[1]; }, 0);
   var now = new Date();
@@ -2875,14 +3042,14 @@ function renderToday(){
   var t = today();
   document.getElementById('today-label-pro').textContent = "Aujourd'hui — " + new Date(t + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   var arr = getEntries({ date: t });
-  renderMetrics('today-metrics', sumType(arr, 'gain'), sumType(arr, 'depense'));
+  renderMetrics('today-metrics', sumType(arr, 'gain'), sumType(arr, 'depense'), { date: t });
   renderEntryList('today-list', arr);
 }
 function renderDay(){
   var d = document.getElementById('d-date').value;
   if(!d) return;
   var arr = getEntries({ date: d });
-  renderMetrics('day-metrics', sumType(arr, 'gain'), sumType(arr, 'depense'));
+  renderMetrics('day-metrics', sumType(arr, 'gain'), sumType(arr, 'depense'), { date: d });
   var el = document.getElementById('day-cats');
   var gains = catBreakdown(arr, 'gain'), deps = catBreakdown(arr, 'depense');
   if(!gains.length && !deps.length){
@@ -2904,7 +3071,7 @@ function renderMonth(){
   var pre = y + '-' + m;
   var arr = getEntries({ month: pre });
   var g = sumType(arr, 'gain'), d = sumType(arr, 'depense');
-  renderMetrics('month-metrics', g, d);
+  renderMetrics('month-metrics', g, d, { month: pre });
   var days = new Date(y, parseInt(m, 10), 0).getDate();
   var t = today();
   var cur = t.indexOf(pre) === 0;
@@ -2992,7 +3159,7 @@ function renderYear(){
   if(!y) return;
   var arr = getEntries({ year: y });
   var g = sumType(arr, 'gain'), d = sumType(arr, 'depense');
-  renderMetrics('year-metrics', g, d);
+  renderMetrics('year-metrics', g, d, { year: y });
   var mG = [], mD = [], mB = [], cum = 0;
   for(var m = 1; m <= 12; m++){
     var pre = y + '-' + String(m).padStart(2, '0');
@@ -3105,7 +3272,8 @@ function renderBudgets(){
   document.getElementById('budget-alerts').innerHTML = alerts.map(function(a){
     return '<div class="alert alert-' + a.type + '">' + a.msg + '</div>';
   }).join('');
-  document.getElementById('budget-list').innerHTML = CATS.depense.map(function(c){
+  var reopen = null;
+  document.getElementById('budget-list').innerHTML = CATS.depense.map(function(c, i){
     var b = budgets[c] || 0, s = spent[c] || 0;
     var p = b > 0 ? Math.min((s / b) * 100, 100) : 0;
     var col = b === 0 ? NEUTRAL : (s > b ? DEP_COL : (s / b > .8 ? THEME.warn : GAIN_COL));
@@ -3113,14 +3281,19 @@ function renderBudgets(){
       : s > b ? 'Dépassé de ' + fmt(s - b)
       : s / b > .8 ? 'Attention : ' + ((s / b) * 100).toFixed(0) + ' % utilisés'
       : 'Dans les clous';
+    var rowId = 'budget-list-drill-' + i;
+    CAT_DRILL[rowId] = { cat: c, type: 'depense', filter: { month: mk } };
+    if(CAT_DRILL_OPEN && CAT_DRILL_OPEN.containerId === 'budget-list' && CAT_DRILL_OPEN.cat === c) reopen = rowId;
     return '<div class="budget-row">' +
-      '<div class="budget-header">' + catIcon(c) +
+      '<div class="budget-header" onclick="toggleCatDrill(\'' + rowId + '\')" style="cursor:pointer" title="Voir les dépenses du mois">' + catIcon(c) +
         '<div class="budget-name"><b>' + esc(c) + '</b><div class="budget-status" style="color:' + col + '">' + etat + '</div></div>' +
         '<div class="budget-amt"><b>' + fmtShort(s) + '</b><div>' + (b > 0 ? 'sur ' + fmtShort(b) : '—') + '</div></div></div>' +
       '<div class="budget-bar"><div class="budget-bar-fill" style="width:' + p + '%;background:' + col + '"></div></div>' +
+      '<div class="entry-list" id="' + rowId + '" style="display:none;margin-bottom:8px"></div>' +
       '<div class="budget-input-row"><input type="number" min="0" placeholder="Plafond" value="' + (b || '') + '" id="budget-' + c + '">' +
       '<button class="btn btn-sm" onclick="setBudget(\'' + c + '\')">OK</button></div></div>';
   }).join('');
+  if(reopen) openCatDrill(reopen);
 }
 function setBudget(c){
   var v = parseFloat(document.getElementById('budget-' + c).value);
@@ -3529,7 +3702,7 @@ function renderCurrentProTab(){
   else if(id === 'mois') renderMonth();
   else if(id === 'annee') renderYear();
   else if(id === 'budgets') renderBudgets();
-  else if(id === 'export'){ renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
+  else if(id === 'export'){ renderReclass(); renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
 }
 function populateSelects(){
   var now = new Date(), cy = now.getFullYear();

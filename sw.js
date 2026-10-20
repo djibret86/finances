@@ -1,7 +1,7 @@
 /* Service worker — rend l'application utilisable sans connexion.
    Pour publier une mise à jour, incrémente CACHE ci-dessous (finances-v2, v3...)
    ET APP_VERSION dans index.html : les deux doivent rester d'accord. */
-var CACHE = 'finances-v14';
+var CACHE = 'finances-v15';
 var NET_TIMEOUT_MS = 2000;   // au-dela, la page s'ouvre depuis le cache
 var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
