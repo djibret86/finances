@@ -11,16 +11,14 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   controle:
     name: Contrôle interne
     # Version fixée : Playwright 1.56 ne sait pas installer Chromium sur
     # ubuntu-26.04, devenue « ubuntu-latest » fin octobre 2026.
     runs-on: ubuntu-24.04
+    # Un controle coince ne doit pas bloquer les suivants indefiniment.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,6 +54,12 @@ jobs:
     needs: controle
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Une seule mise en ligne a la fois. Placee ici et non sur tout le workflow :
+    # sinon un controle de pull request coince bloquait tous les autres.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write
