@@ -220,6 +220,25 @@ body{
 .releve-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid var(--line-soft);font-size:14px;
   text-transform:none;letter-spacing:0;color:var(--text);margin:0;font-weight:400}
 
+/* ---------- Comptes -------------------------------------- */
+.acc-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-2px 0 10px}
+.acc-chip{
+  min-height:34px;padding:0 12px;border-radius:999px;border:1.5px solid var(--line);
+  background:var(--surface);color:var(--text);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;
+}
+.acc-chip.on{background:var(--sol);border-color:var(--sol);color:#fff}
+.compte-row{
+  display:flex;align-items:center;gap:10px;width:100%;padding:10px 4px;
+  border:none;border-top:1px solid var(--line-soft);background:none;color:var(--text);
+  font-family:inherit;font-size:14px;cursor:pointer;
+}
+.compte-row.on{background:var(--surface-3);border-radius:10px}
+
+/* ---------- Rubriques de l'ecran Plus -------------------- */
+.plus-group{margin-bottom:6px}
+.plus-group>summary{font-size:19px;font-weight:800;margin:10px 2px 4px}
+.plus-intro{font-size:13px;color:var(--text-3);margin:0 2px 10px}
+
 /* ---------- Notes ---------------------------------------- */
 .note-item{padding:12px 14px;border:1px solid var(--line-soft);border-radius:14px;background:var(--surface-3)}
 
@@ -647,7 +666,7 @@ details[open] summary::after{transform:rotate(-135deg)}
       <div class="lite-date" id="lite-date"></div>
       <h1 class="page-title">Bonjour</h1>
     </div>
-    <button type="button" class="icon-btn" onclick="startCheckpoint()" aria-label="Pointer mon solde" title="Pointer mon solde">
+    <button type="button" class="icon-btn" onclick="startCheckpoint()" aria-label="Corriger mon solde" title="Corriger mon solde">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 21h14M5 7h14M5 7l-3 7a4 4 0 0 0 6 0zM19 7l-3 7a4 4 0 0 0 6 0z"/></svg>
     </button>
   </div>
@@ -678,11 +697,30 @@ details[open] summary::after{transform:rotate(-135deg)}
     </div>
   </div>
 
+  <div class="card banner-btn alert-warn" id="lite-point-banner" style="display:none;align-items:center">
+    <span id="lite-point-text" style="flex:1;min-width:0"></span>
+    <button type="button" class="btn btn-sm" onclick="startCheckpoint()" style="flex:0 0 auto">Pointer</button>
+    <button type="button" class="btn btn-sm" onclick="snoozePointage()" style="flex:0 0 auto;width:36px;padding:0" title="Plus tard" aria-label="Plus tard">✕</button>
+  </div>
+
+  <div class="card" id="comptes-card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+      <div class="section-title" style="margin:0">Mes comptes</div>
+      <span style="font-size:12px;color:var(--text-3)">touche un compte pour ses opérations</span>
+    </div>
+    <div id="comptes-list"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button type="button" class="btn btn-sm" style="flex:1" onclick="dialogTransfert()">↔ Transfert</button>
+      <button type="button" class="btn btn-primary btn-sm" style="flex:1" onclick="dialogPointerComptes()">⚖️ Pointer mes comptes</button>
+    </div>
+  </div>
+
   <div id="lite-solde-detail"></div>
   <div id="lite-hero-detail"></div>
 
   <div class="card">
     <label for="quick-input" style="margin:0 0 10px;font-size:15px;font-weight:650;letter-spacing:0;text-transform:none;color:var(--text)">Nouvelles entrées <span style="font-weight:500;color:var(--text-3)">· une par ligne</span></label>
+    <div class="acc-chips" id="acc-chips" role="radiogroup" aria-label="Compte des nouvelles entrées"></div>
     <div class="hero-row" style="align-items:flex-start">
       <textarea id="quick-input" rows="3" placeholder="Taxi -2000&#10;Bière -650 hier&#10;Salaire +580000" style="font-family:inherit;font-size:16px;line-height:1.5"></textarea>
       <button type="button" class="add-btn" onclick="saveQuick()" aria-label="Enregistrer les entrées">
@@ -720,6 +758,7 @@ details[open] summary::after{transform:rotate(-135deg)}
 
   <div class="card">
     <div class="section-title">Mes opérations</div>
+    <div id="ops-filtre"></div>
     <div class="entry-list" id="lite-ops" style="max-height:none"></div>
   </div>
 
@@ -971,170 +1010,191 @@ details[open] summary::after{transform:rotate(-135deg)}
 
   <div class="pro-section" id="pro-export">
     <h1 class="page-title">Plus</h1>
-    <!-- Revision des entrees anterieures au correctif du signe (12/08/2026).
-         Cette carte reste invisible tant que findSuspects() ne trouve rien,
-         et disparait definitivement une fois la revision close. -->
-    <!-- Reclassement : regroupe les entrees « Autre » (et l'alcool encore range en
-         Alimentation) par mot, pour les classer d'un geste. Invisible s'il n'y a rien. -->
-    <div class="card" id="pro-clean-card" style="display:none">
-      <div class="section-title">Retirer les opérations de l'entreprise</div>
-      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
-        Cette application suit tes finances <b>personnelles</b>. Voici les ventes, achats de matières premières,
-        stock et paiements marqués « Pro » trouvés dans tes entrées. <b>Décoche</b> celles qui sont vraiment personnelles.
+    <!-- Rangement en trois rubriques repliables : onze cartes a la suite noyaient
+         les outils ; les cartes gardent leurs id, leur logique d'affichage ne change pas. -->
+    <details class="plus-group" open>
+      <summary>Mes données</summary>
+      <div class="plus-intro">Sauvegarde, historique complet, pointages et suppression.</div>
+      <div class="card">
+        <div class="section-title">Export & sauvegarde</div>
+        <div id="last-backup" style="font-size:13px;color:var(--text-3);margin:-6px 0 12px"></div>
+        <!-- Revele par initUI() uniquement si le partage de fichier existe, sinon
+             ce bouton ferait doublon avec le telechargement juste en dessous. -->
+        <button class="btn btn-primary" id="btn-share-backup" onclick="shareBackup()" style="width:100%;margin-bottom:8px;display:none">📤 Envoyer la sauvegarde</button>
+        <button class="btn btn-primary" onclick="exportCSV()" style="width:100%;margin-bottom:8px">Télécharger CSV</button>
+        <button class="btn" onclick="exportJSON()" style="width:100%;margin-bottom:8px">Sauvegarde JSON</button>
+        <label class="btn" style="width:100%;display:block;text-align:center;cursor:pointer">
+          Restaurer une sauvegarde JSON
+          <input type="file" accept=".json,application/json" onchange="importJSON(event)" style="display:none">
+        </label>
+        <div id="import-msg" style="font-size:13px;margin-top:8px"></div>
       </div>
-      <div id="pro-clean-list"></div>
-      <div id="pro-clean-sum" style="font-size:13px;margin:10px 0"></div>
-      <button class="btn btn-danger" id="pro-clean-btn" style="width:100%" onclick="confirmerNettoyage()"></button>
+
+      <div class="card">
+        <div class="section-title">Historique complet</div>
+        <input type="text" id="h-search" oninput="filtreHist()" placeholder="Rechercher..." style="margin-bottom:8px">
+        <div class="period-row" style="flex-wrap:wrap">
+          <select id="h-type" onchange="filtreHist()" style="flex:1;min-width:120px">
+            <option value="">Tous types</option>
+            <option value="gain">Gains</option>
+            <option value="depense">Dépenses</option>
+          </select>
+          <select id="h-cat" onchange="filtreHist()" style="flex:1;min-width:120px">
+            <option value="">Toutes catégories</option>
+          </select>
+        </div>
+        <div class="period-row" style="flex-wrap:wrap">
+          <select id="h-month" onchange="filtreHist()" style="flex:1;min-width:120px"><option value="">Tous mois</option></select>
+          <select id="h-year" onchange="filtreHist()" style="flex:1;min-width:100px"><option value="">Toutes années</option></select>
+        </div>
+        <div class="entry-list" id="hist-list" style="max-height:500px"></div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:8px;text-align:right" id="hist-count"></div>
+      </div>
+
+      <!-- Historique des pointages du solde reel. Masquee tant qu'il n'y en a aucun. -->
+      <div class="card" id="checkpoint-card" style="display:none">
+        <div class="section-title">⚖️ Pointages du solde réel</div>
+        <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:12px">
+          L'écart mesure ce qui a échappé à la saisie entre deux pointages.
+        </div>
+        <div id="checkpoint-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title" style="color:var(--dep)">Supprimer des données</div>
+        <label>Une journée</label>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <input type="date" id="del-day" style="flex:1">
+          <button class="btn btn-danger btn-sm" onclick="deleteByDay()">Suppr.</button>
+        </div>
+        <label>Un mois</label>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <select id="del-month" style="flex:1"></select>
+          <select id="del-year" style="flex:1"></select>
+          <button class="btn btn-danger btn-sm" onclick="deleteByMonth()">Suppr.</button>
+        </div>
+        <label>Une catégorie</label>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <select id="del-cat" style="flex:1"></select>
+          <button class="btn btn-danger btn-sm" onclick="deleteByCat()">Suppr.</button>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="deleteFiltered()" style="width:100%;margin-bottom:16px">Supprimer les <span id="del-filtered-count">0</span> entrée(s) filtrée(s)</button>
+        <div style="border-top:1px solid var(--line);padding-top:12px">
+          <button class="btn btn-danger btn-sm" onclick="clearPlannedOnly()" style="width:100%;margin-bottom:6px">Effacer les prévisions</button>
+          <button class="btn btn-danger btn-sm" onclick="clearBudgetsOnly()" style="width:100%;margin-bottom:6px">Réinitialiser les budgets</button>
+          <button class="btn btn-danger btn-sm" onclick="clearEntriesOnly()" style="width:100%;margin-bottom:6px">Effacer les entrées</button>
+          <button class="btn btn-danger" onclick="confirmClearAll()" style="width:100%">⚠️ Tout effacer</button>
+        </div>
+        <div id="del-msg" style="font-size:13px;margin-top:10px"></div>
+      </div>
+    </details>
+
+    <details class="plus-group" open>
+      <summary>Outils</summary>
+      <div class="plus-intro">Relevés, nettoyage, classement et catégories.</div>
+      <div class="card" id="pro-clean-card" style="display:none">
+        <div class="section-title">Retirer les opérations de l'entreprise</div>
+        <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
+          Cette application suit tes finances <b>personnelles</b>. Voici les ventes, achats de matières premières,
+          stock et paiements marqués « Pro » trouvés dans tes entrées. <b>Décoche</b> celles qui sont vraiment personnelles.
+        </div>
+        <div id="pro-clean-list"></div>
+        <div id="pro-clean-sum" style="font-size:13px;margin:10px 0"></div>
+        <button class="btn btn-danger" id="pro-clean-btn" style="width:100%" onclick="confirmerNettoyage()"></button>
+      </div>
+
+      <div class="card">
+      <div class="section-title">Mes comptes</div>
+      <div class="entry-list" id="gestion-comptes" style="max-height:none"></div>
+      <button class="btn btn-sm" style="width:100%;margin-top:10px" onclick="ajouterCompte()">+ Ajouter un compte</button>
     </div>
 
     <div class="card" id="releve-card">
-      <div class="section-title">Comparer avec un relevé</div>
-      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
-        Colle les opérations de ta banque ou de Wave, une par ligne, avec la date à la fin.
-        <b>Mets + devant les entrées d'argent.</b> L'app repère ce qui est déjà saisi et te propose le reste.
-        Touche <b>Pro ?</b> sur un paiement de ton entreprise : il ne sera jamais compté, et l'app s'en souviendra.
-      </div>
-      <textarea id="releve-input" rows="5" placeholder="Maquis Sandy -4300 28/10&#10;De Doudou +16000 31/10&#10;Dépôt +20000 27/10" style="font-family:inherit;font-size:15px;line-height:1.5"></textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:10px">
-        <button class="btn btn-primary btn-sm" onclick="runReleve()">Comparer</button>
-      </div>
-      <div id="releve-result" style="margin-top:10px"></div>
-    </div>
-
-    <div class="card">
-      <div class="section-title">Mes catégories</div>
-      <div class="entry-list" id="custom-cat-list" style="max-height:none;margin-bottom:12px"></div>
-      <div id="cc-form" style="border-top:1px solid var(--line-soft);padding-top:12px">
-        <div style="font-size:14px;font-weight:650;margin-bottom:4px" id="cc-title">Nouvelle catégorie</div>
-        <label for="cc-type">Type</label>
-        <select id="cc-type"><option value="depense">Dépense</option><option value="gain">Gain</option></select>
-        <label for="cc-name">Nom</label>
-        <input type="text" id="cc-name" maxlength="30" placeholder="ex. Bière, Enfants, Tontine…" autocomplete="off">
-        <label>Icône</label>
-        <div class="pick-row" id="cc-icons"></div>
-        <label>Couleur</label>
-        <div class="pick-row" id="cc-colors"></div>
-        <label for="cc-kw">Mots-clés (séparés par des virgules)</label>
-        <input type="text" id="cc-kw" placeholder="ex. flag, castel, bière" autocomplete="off">
-        <div style="font-size:12px;color:var(--text-3);margin-top:6px">Une saisie qui contient un de ces mots ira directement dans cette catégorie.</div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
-          <button class="btn btn-sm" id="cc-cancel" style="display:none" onclick="resetCatForm()">Annuler</button>
-          <button class="btn btn-primary btn-sm" id="cc-submit" onclick="submitCatForm()">Créer</button>
+        <div class="section-title">Comparer avec un relevé</div>
+        <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
+          Colle les opérations de ta banque ou de Wave, une par ligne, avec la date à la fin.
+          <b>Mets + devant les entrées d'argent.</b> L'app repère ce qui est déjà saisi et te propose le reste.
+          Touche <b>Pro ?</b> sur un paiement de ton entreprise : il ne sera jamais compté, et l'app s'en souviendra.
         </div>
-        <div id="cc-msg" style="font-size:13px;margin-top:8px"></div>
+        <label for="releve-acc" style="margin-top:0">Ce relevé concerne</label>
+      <select id="releve-acc" style="margin-bottom:8px"></select>
+      <textarea id="releve-input" rows="5" placeholder="Maquis Sandy -4300 28/10&#10;De Doudou +16000 31/10&#10;Dépôt +20000 27/10" style="font-family:inherit;font-size:15px;line-height:1.5"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px">
+          <button class="btn btn-primary btn-sm" onclick="runReleve()">Comparer</button>
+        </div>
+        <div id="releve-result" style="margin-top:10px"></div>
       </div>
-    </div>
 
-    <div class="card" id="reclass-card" style="display:none">
-      <div class="section-title">Entrées à mieux classer</div>
-      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
-        Un choix s'applique à toutes les entrées du groupe, et l'app le retient pour les prochaines saisies.
+      <div class="card" id="reclass-card" style="display:none">
+        <div class="section-title">Entrées à mieux classer</div>
+        <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
+          Un choix s'applique à toutes les entrées du groupe, et l'app le retient pour les prochaines saisies.
+        </div>
+        <div id="reclass-list"></div>
       </div>
-      <div id="reclass-list"></div>
-    </div>
 
-    <div class="card" id="repair-card" style="display:none">
-      <div class="section-title">🔎 Entrées à vérifier</div>
-      <div id="repair-intro" style="font-size:13px;line-height:1.55;margin-bottom:12px"></div>
-      <div id="repair-list" class="entry-list" style="margin-bottom:12px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-danger btn-sm" onclick="repairAll()" style="flex:1;min-width:150px">Tout passer en dépense</button>
-        <button class="btn btn-sm" onclick="repairDismiss()" style="flex:1;min-width:120px">Tout est correct</button>
-      </div>
-    </div>
+      <!-- Revision des entrees anterieures au correctif du signe (12/08/2026).
+           Cette carte reste invisible tant que findSuspects() ne trouve rien,
+           et disparait definitivement une fois la revision close. -->
 
-    <!-- Historique des pointages du solde reel. Masquee tant qu'il n'y en a aucun. -->
-    <div class="card" id="checkpoint-card" style="display:none">
-      <div class="section-title">⚖️ Pointages du solde réel</div>
-      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:12px">
-        L'écart mesure ce qui a échappé à la saisie entre deux pointages.
+      <div class="card" id="repair-card" style="display:none">
+        <div class="section-title">🔎 Entrées à vérifier</div>
+        <div id="repair-intro" style="font-size:13px;line-height:1.55;margin-bottom:12px"></div>
+        <div id="repair-list" class="entry-list" style="margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-danger btn-sm" onclick="repairAll()" style="flex:1;min-width:150px">Tout passer en dépense</button>
+          <button class="btn btn-sm" onclick="repairDismiss()" style="flex:1;min-width:120px">Tout est correct</button>
+        </div>
       </div>
-      <div id="checkpoint-list"></div>
-    </div>
 
-    <div class="card">
-      <div class="section-title">🩺 Diagnostic de sauvegarde</div>
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button class="btn btn-sm" onclick="runDiagnostic()" style="flex:1">Tester</button>
-        <button class="btn btn-sm" onclick="forceSaveAll()" style="flex:1">Forcer sauvegarde</button>
+      <div class="card">
+        <div class="section-title">Mes catégories</div>
+        <div class="entry-list" id="custom-cat-list" style="max-height:none;margin-bottom:12px"></div>
+        <div id="cc-form" style="border-top:1px solid var(--line-soft);padding-top:12px">
+          <div style="font-size:14px;font-weight:650;margin-bottom:4px" id="cc-title">Nouvelle catégorie</div>
+          <label for="cc-type">Type</label>
+          <select id="cc-type"><option value="depense">Dépense</option><option value="gain">Gain</option></select>
+          <label for="cc-name">Nom</label>
+          <input type="text" id="cc-name" maxlength="30" placeholder="ex. Bière, Enfants, Tontine…" autocomplete="off">
+          <label>Icône</label>
+          <div class="pick-row" id="cc-icons"></div>
+          <label>Couleur</label>
+          <div class="pick-row" id="cc-colors"></div>
+          <label for="cc-kw">Mots-clés (séparés par des virgules)</label>
+          <input type="text" id="cc-kw" placeholder="ex. flag, castel, bière" autocomplete="off">
+          <div style="font-size:12px;color:var(--text-3);margin-top:6px">Une saisie qui contient un de ces mots ira directement dans cette catégorie.</div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+            <button class="btn btn-sm" id="cc-cancel" style="display:none" onclick="resetCatForm()">Annuler</button>
+            <button class="btn btn-primary btn-sm" id="cc-submit" onclick="submitCatForm()">Créer</button>
+          </div>
+          <div id="cc-msg" style="font-size:13px;margin-top:8px"></div>
+        </div>
       </div>
-      <div id="diag-result" style="font-size:12px;line-height:1.7;padding:10px;background:var(--surface-3);border-radius:8px">Appuie sur « Tester ».</div>
-    </div>
 
-    <div class="card">
-      <div class="section-title">Export & sauvegarde</div>
-      <div id="last-backup" style="font-size:13px;color:var(--text-3);margin:-6px 0 12px"></div>
-      <!-- Revele par initUI() uniquement si le partage de fichier existe, sinon
-           ce bouton ferait doublon avec le telechargement juste en dessous. -->
-      <button class="btn btn-primary" id="btn-share-backup" onclick="shareBackup()" style="width:100%;margin-bottom:8px;display:none">📤 Envoyer la sauvegarde</button>
-      <button class="btn btn-primary" onclick="exportCSV()" style="width:100%;margin-bottom:8px">Télécharger CSV</button>
-      <button class="btn" onclick="exportJSON()" style="width:100%;margin-bottom:8px">Sauvegarde JSON</button>
-      <label class="btn" style="width:100%;display:block;text-align:center;cursor:pointer">
-        Restaurer une sauvegarde JSON
-        <input type="file" accept=".json,application/json" onchange="importJSON(event)" style="display:none">
-      </label>
-      <div id="import-msg" style="font-size:13px;margin-top:8px"></div>
-    </div>
+      <!-- Ce que l'app a retenu de tes corrections. Rien ne doit s'apprendre en
+           cachette : chaque regle est listee et supprimable une par une. -->
+      <div class="card" id="learned-card" style="display:none">
+        <div class="section-title">🧠 Catégories apprises</div>
+        <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:12px">
+          Quand tu corriges la catégorie d'une entrée, l'app retient le mot et l'applique aux prochaines saisies.
+        </div>
+        <div id="learned-list"></div>
+        <button class="btn btn-danger btn-sm" onclick="forgetAllCats()" style="width:100%;margin-top:10px">Tout oublier</button>
+      </div>
+    </details>
 
-    <div class="card">
-      <div class="section-title">Historique complet</div>
-      <input type="text" id="h-search" oninput="renderHist()" placeholder="Rechercher..." style="margin-bottom:8px">
-      <div class="period-row" style="flex-wrap:wrap">
-        <select id="h-type" onchange="renderHist()" style="flex:1;min-width:120px">
-          <option value="">Tous types</option>
-          <option value="gain">Gains</option>
-          <option value="depense">Dépenses</option>
-        </select>
-        <select id="h-cat" onchange="renderHist()" style="flex:1;min-width:120px">
-          <option value="">Toutes catégories</option>
-        </select>
+    <details class="plus-group">
+      <summary>Réglages</summary>
+      <div class="plus-intro">Diagnostic de la sauvegarde.</div>
+      <div class="card">
+        <div class="section-title">🩺 Diagnostic de sauvegarde</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button class="btn btn-sm" onclick="runDiagnostic()" style="flex:1">Tester</button>
+          <button class="btn btn-sm" onclick="forceSaveAll()" style="flex:1">Forcer sauvegarde</button>
+        </div>
+        <div id="diag-result" style="font-size:12px;line-height:1.7;padding:10px;background:var(--surface-3);border-radius:8px">Appuie sur « Tester ».</div>
       </div>
-      <div class="period-row" style="flex-wrap:wrap">
-        <select id="h-month" onchange="renderHist()" style="flex:1;min-width:120px"><option value="">Tous mois</option></select>
-        <select id="h-year" onchange="renderHist()" style="flex:1;min-width:100px"><option value="">Toutes années</option></select>
-      </div>
-      <div class="entry-list" id="hist-list" style="max-height:500px"></div>
-      <div style="font-size:12px;color:var(--text-3);margin-top:8px;text-align:right" id="hist-count"></div>
-    </div>
-
-    <!-- Ce que l'app a retenu de tes corrections. Rien ne doit s'apprendre en
-         cachette : chaque regle est listee et supprimable une par une. -->
-    <div class="card" id="learned-card" style="display:none">
-      <div class="section-title">🧠 Catégories apprises</div>
-      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:12px">
-        Quand tu corriges la catégorie d'une entrée, l'app retient le mot et l'applique aux prochaines saisies.
-      </div>
-      <div id="learned-list"></div>
-      <button class="btn btn-danger btn-sm" onclick="forgetAllCats()" style="width:100%;margin-top:10px">Tout oublier</button>
-    </div>
-
-    <div class="card">
-      <div class="section-title" style="color:var(--dep)">Supprimer des données</div>
-      <label>Une journée</label>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input type="date" id="del-day" style="flex:1">
-        <button class="btn btn-danger btn-sm" onclick="deleteByDay()">Suppr.</button>
-      </div>
-      <label>Un mois</label>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <select id="del-month" style="flex:1"></select>
-        <select id="del-year" style="flex:1"></select>
-        <button class="btn btn-danger btn-sm" onclick="deleteByMonth()">Suppr.</button>
-      </div>
-      <label>Une catégorie</label>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <select id="del-cat" style="flex:1"></select>
-        <button class="btn btn-danger btn-sm" onclick="deleteByCat()">Suppr.</button>
-      </div>
-      <button class="btn btn-danger btn-sm" onclick="deleteFiltered()" style="width:100%;margin-bottom:16px">Supprimer les <span id="del-filtered-count">0</span> entrée(s) filtrée(s)</button>
-      <div style="border-top:1px solid var(--line);padding-top:12px">
-        <button class="btn btn-danger btn-sm" onclick="clearPlannedOnly()" style="width:100%;margin-bottom:6px">Effacer les prévisions</button>
-        <button class="btn btn-danger btn-sm" onclick="clearBudgetsOnly()" style="width:100%;margin-bottom:6px">Réinitialiser les budgets</button>
-        <button class="btn btn-danger btn-sm" onclick="clearEntriesOnly()" style="width:100%;margin-bottom:6px">Effacer les entrées</button>
-        <button class="btn btn-danger" onclick="confirmClearAll()" style="width:100%">⚠️ Tout effacer</button>
-      </div>
-      <div id="del-msg" style="font-size:13px;margin-top:10px"></div>
-    </div>
+    </details>
 
     <!-- Repere de version : permet de savoir d'un coup d'oeil si le telephone
          tourne encore sur une page gardee en cache. A bumper avec CACHE dans sw.js. -->
@@ -1196,7 +1256,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v20';
+var APP_VERSION = 'v22';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Alcool':'#A23B5A','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1507,6 +1567,21 @@ function load(){
     return storageGet('budget_pro_names');
   }).then(function(r){
     if(r && r.value){ try { proNames = JSON.parse(r.value) || {}; } catch(e){} }
+    return storageGet('budget_point_snooze');
+  }).then(function(r){
+    if(r && r.value) pointSnooze = r.value;
+    return storageGet('budget_accounts');
+  }).then(function(r){
+    if(r && r.value){ try { comptes = sanitizeComptes(JSON.parse(r.value)) || comptes; } catch(e){} }
+    return storageGet('budget_transfers');
+  }).then(function(r){
+    if(r && r.value){ try { transfers = sanitizeTransfers(JSON.parse(r.value)); } catch(e){} }
+    return storageGet('budget_acc_cps');
+  }).then(function(r){
+    if(r && r.value){ try { accCps = sanitizeAccCps(JSON.parse(r.value)); } catch(e){} }
+    return storageGet('budget_acc_saisie');
+  }).then(function(r){
+    if(r && r.value && compteNom(r.value)) compteSaisie = r.value;
     soldeConnu = soldeActuel();
     setStorageStatus(true);
   });
@@ -2142,8 +2217,11 @@ function dateFromParts(d, m, y){
   var year = (y == null) ? now.getFullYear() : (y < 100 ? 2000 + y : y);
   var dt = new Date(year, m - 1, d, 12, 0, 0);
   if(dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;   // rejette le 31/02
-  if(y == null && dt > now) dt.setFullYear(year - 1);              // sans année : jamais dans le futur
-  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+  var iso = function(x){ return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+  /* Sans annee : jamais dans le futur. On compare des JOURS : comparer a l'heure
+     (date a midi contre maintenant) envoyait la date du jour a l'an passe avant midi. */
+  if(y == null && iso(dt) > today()) dt.setFullYear(year - 1);
+  return iso(dt);
 }
 function stripDate(line){
   var s = String(line).trim(), m;
@@ -2324,7 +2402,7 @@ function entryRowHTML(e){
   return '<div class="entry-item" id="entry-' + e.id + '">' + catIcon(e.cat) +
     '<div class="entry-meta">' +
       '<div class="entry-title">' + esc(e.desc || e.cat) + '</div>' +
-      '<div class="entry-cat">' + (e.desc ? esc(e.cat) + ' · ' : '') + fmtDateRel(e.date) + '</div>' +
+      '<div class="entry-cat">' + (e.desc ? esc(e.cat) + ' · ' : '') + (e.acc && compteNom(e.acc) ? esc(compteNom(e.acc)) + ' · ' : '') + fmtDateRel(e.date) + '</div>' +
     '</div>' +
     /* Montant exact, comme sur un releve bancaire : « 20k » ne permet pas de
        pointer ligne a ligne avec la banque. */
@@ -2336,22 +2414,41 @@ function entryRowHTML(e){
 /* Toutes les operations, la plus recente d'abord, regroupees par mois comme sur
    un releve bancaire. On en montre OPS_PAS a la fois pour garder l'ecran fluide. */
 var OPS_PAS = 40, opsMax = OPS_PAS;
+function transferRowHTML(x){
+  var sens = opsCompte ? (x.to === opsCompte ? '+' : '−') : '';
+  return '<div class="entry-item">' +
+    '<span class="cat-ico" aria-hidden="true" style="background:var(--surface-2);color:var(--text-2);font-size:18px">↔</span>' +
+    '<div class="entry-meta"><div class="entry-title">' + esc(compteNom(x.from) || '?') + ' → ' + esc(compteNom(x.to) || '?') + '</div>' +
+    '<div class="entry-cat">Transfert' + (x.desc ? ' · ' + esc(x.desc) : '') + ' · ' + fmtDateRel(x.date) + '</div></div>' +
+    '<span class="entry-amount" style="color:var(--text-2)">' + sens + Math.round(x.amount).toLocaleString('fr-FR') + '</span>' +
+    '<button class="btn btn-danger btn-sm" onclick="deleteTransfer(' + x.id + ')" aria-label="Supprimer le transfert">✕</button></div>';
+}
 function renderOperations(){
   var el = document.getElementById('lite-ops');
   if(!el) return;
-  if(!entries.length){ el.innerHTML = '<div class="empty">Aucune opération pour l\'instant.</div>'; return; }
+  var f = document.getElementById('ops-filtre');
+  if(f) f.innerHTML = opsCompte
+    ? '<button type="button" class="acc-chip on" style="margin-bottom:8px" onclick="filtrerCompte(\'' + opsCompte + '\')">' + esc(compteNom(opsCompte)) + ' ✕</button>'
+    : '';
+  var liste = entries.filter(function(e){ return !opsCompte || e.acc === opsCompte; }).map(function(e){ return { e: e }; })
+    .concat(transfers.filter(function(x){ return !opsCompte || x.from === opsCompte || x.to === opsCompte; }).map(function(x){ return { t: x }; }));
+  liste.sort(function(a, b){
+    var x = a.e || a.t, y = b.e || b.t;
+    return y.date.localeCompare(x.date) || (y.id || 0) - (x.id || 0);
+  });
+  if(!liste.length){ el.innerHTML = '<div class="empty">Aucune opération' + (opsCompte ? ' sur ce compte' : '') + ' pour l\'instant.</div>'; return; }
   var html = '', moisCourant = null;
-  entries.slice(0, opsMax).forEach(function(e){
-    var m = e.date.slice(0, 7);
+  liste.slice(0, opsMax).forEach(function(o){
+    var d = (o.e || o.t).date, m = d.slice(0, 7);
     if(m !== moisCourant){
       moisCourant = m;
       html += '<div class="ops-month">' + MONTHS[parseInt(m.slice(5), 10) - 1] + ' ' + m.slice(0, 4) + '</div>';
     }
-    html += entryRowHTML(e);
+    html += o.e ? entryRowHTML(o.e) : transferRowHTML(o.t);
   });
-  if(entries.length > opsMax){
+  if(liste.length > opsMax){
     html += '<button type="button" class="btn btn-sm" style="width:100%;margin-top:10px" onclick="opsMax += OPS_PAS; renderOperations()">' +
-      'Voir les opérations plus anciennes (' + (entries.length - opsMax) + ')</button>';
+      'Voir les opérations plus anciennes (' + (liste.length - opsMax) + ')</button>';
   }
   el.innerHTML = html;
 }
@@ -2568,6 +2665,7 @@ function openEdit(id){
       '<select id="edit-cat" style="flex:1;padding:6px 8px;font-size:13px"></select>' +
       '<input type="number" id="edit-amount" value="' + e.amount + '" min="0" style="flex:1;padding:6px 8px;font-size:13px"></div>' +
     '<input type="text" id="edit-desc" value="' + esc(e.desc || '') + '" style="margin-bottom:6px;padding:6px 8px;font-size:13px">' +
+    '<select id="edit-acc" style="margin-bottom:6px;padding:6px 8px;font-size:13px"><option value="">Sans compte</option>' + optionsComptes(e.acc || '') + '</select>' +
     '<div style="display:flex;gap:6px;justify-content:flex-end">' +
       '<button class="btn btn-sm" onclick="renderAll()">Annuler</button>' +
       '<button class="btn btn-primary btn-sm" onclick="saveEdit()">Sauvegarder</button></div></div>';
@@ -2591,6 +2689,8 @@ function saveEdit(){
   e.cat = document.getElementById('edit-cat').value;
   e.amount = amount;
   e.desc = document.getElementById('edit-desc').value.trim();
+  var acc = document.getElementById('edit-acc').value;
+  if(acc) e.acc = acc; else delete e.acc;
   /* Corriger une categorie, c'est enseigner : on en tire une regle pour la suite.
      Uniquement si la categorie a change — reenregistrer une entree sans y toucher
      n'apprend rien. */
@@ -2792,10 +2892,16 @@ function saveHero(inpId, msgId, prevId){
   var p = parseEntryLine(inp.value, base);
   if(!p){ msg.style.color = DEP_COL; msg.textContent = 'Format : Description ±montant'; return; }
   var date = p.date;
-  confirmIfOddAsync(p.amount, date, p.desc + ' — ' + p.cat + dateSuffix(date)).then(function(ok){
+  var proGate = estPro(p.desc)
+    ? uiConfirm('🏢 « ' + esc(p.desc) + ' » est marqué « Pro » : un paiement de l\'entreprise, géré dans ton autre app.\n\nLe compter quand même en perso ?', 'Le compter', 'Non')
+    : Promise.resolve(true);
+  proGate.then(function(ok){
+    if(!ok){ inp.value = ''; msg.style.color = THEME.text3; msg.textContent = 'Non enregistré (paiement de l\'entreprise).'; return false; }
+    return confirmIfOddAsync(p.amount, date, p.desc + ' — ' + p.cat + dateSuffix(date));
+  }).then(function(ok){
     if(!ok) return;
     var nid = nextId();
-    entries.push({ id: nid, date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
+    entries.push(avecCompte({ id: nid, date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc }));
     sortEntries();
     return save().then(function(){
       var al = checkBudgetAlert({ type: p.type, cat: p.cat, date: date });
@@ -2822,6 +2928,21 @@ function saveQuick(){
     if(p) parsed.push(p); else fail++;
   });
   if(!parsed.length){ msg.style.color = DEP_COL; msg.textContent = 'Format non reconnu.'; return; }
+  /* Un nom marque « Pro » dans l'outil de releve est un paiement de l'entreprise :
+     tape a la main, il entrait quand meme dans les comptes perso. */
+  var pros = parsed.filter(function(p){ return estPro(p.desc); });
+  if(!pros.length){ saveParsed(parsed, fail, msg); return; }
+  uiChoice('🏢 <b>' + pros.length + ' ligne(s)</b> concernent un nom marqué « Pro » (paiement de l\'entreprise) :\n' +
+      pros.slice(0, 5).map(function(p){ return '• ' + esc(p.desc) + ' : ' + fmt(p.amount); }).join('\n') +
+      '\n\nCes opérations sont gérées dans ton autre app.', 'Ne pas les compter', 'Les compter en perso', 'Annuler')
+    .then(function(c){
+      if(c === 'cancel') return;
+      var garde = c === 'ok' ? parsed.filter(function(p){ return !estPro(p.desc); }) : parsed;
+      if(!garde.length){ msg.style.color = THEME.text3; msg.textContent = 'Rien d\'enregistré : uniquement des paiements de l\'entreprise.'; document.getElementById('quick-input').value = ''; return; }
+      saveParsed(garde, fail, msg);
+    });
+}
+function saveParsed(parsed, fail, msg){
   var odd = parsed.filter(function(p){ return sanityCheck(p.amount, p.date).length; });
   var gate = odd.length
     ? uiConfirm('⚠️ ' + odd.length + ' entrée(s) inhabituelle(s) :\n\n' + odd.slice(0,5).map(function(p){ return '• ' + esc(p.desc) + ' : ' + fmt(p.amount) + esc(dateSuffix(p.date)); }).join('\n') + '\n\nEnregistrer ?')
@@ -2832,7 +2953,7 @@ function saveQuick(){
     parsed.forEach(function(p){
       var nid = nextId();
       nids.push(nid);
-      entries.push({ id: nid, date: p.date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
+      entries.push(avecCompte({ id: nid, date: p.date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc }));
     });
     sortEntries();
     return save().then(function(){
@@ -2884,7 +3005,7 @@ function saveEntry(){
   confirmIfOddAsync(amount, date, (desc || cat) + ' — ' + cat).then(function(ok){
     if(!ok) return;
     var nid = nextId();
-    entries.push({ id: nid, date: date, type: type, cat: cat, amount: amount, desc: desc });
+    entries.push(avecCompte({ id: nid, date: date, type: type, cat: cat, amount: amount, desc: desc }));
     sortEntries();
     return save().then(function(){
       /* clearForm() vide aussi #f-msg : l'appeler APRES le message l'effacait aussitot,
@@ -3121,7 +3242,7 @@ function useShortcut(i){
   confirmIfOddAsync(p.amount, date, p.desc + ' — ' + p.cat).then(function(ok){
     if(!ok) return;
     var nid = nextId();
-    entries.push({ id: nid, date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc });
+    entries.push(avecCompte({ id: nid, date: date, type: p.type, cat: p.cat, amount: p.amount, desc: p.desc }));
     sortEntries();
     return save().then(function(){
       var msg = document.getElementById(mode === 'lite' ? 'hero-msg' : 'hero-msg-pro');
@@ -3198,6 +3319,9 @@ function renderLite(){
   renderMetricDetail('lite-hero');
   renderLiteBudgetWidget();
   renderReclassBanner();
+  renderPointBanner();
+  renderAccChips();
+  renderComptes();
   var b = document.getElementById('lite-planned-banner');
   if(planned.length){
     var dueN = planned.filter(function(p){ return p.date <= t; }).length;
@@ -3474,9 +3598,10 @@ function compareReleve(texte){
     if(!ligne) return;
     var p = parseEntryLine(ligne, today());
     if(!p){ res.push({ ligne: ligne, etat: 'illisible', coche: false }); return; }
-    var meilleur = null, ecart = 99;
+    var meilleur = null, ecart = 99, accRel = (document.getElementById('releve-acc') || {}).value || '';
     entries.forEach(function(e){
       if(pris[e.id] || e.type !== p.type || Math.round(e.amount) !== Math.round(p.amount)) return;
+      if(accRel && e.acc && e.acc !== accRel) return;    // deja rattachee a un autre compte
       var j = Math.abs(daysBetween(e.date, p.date));
       if(j <= RELEVE_JOURS && j < ecart){ meilleur = e; ecart = j; }
     });
@@ -3540,7 +3665,10 @@ function addReleve(){
   var c = RELEVE.filter(function(r){ return r.coche && r.p; });
   if(!c.length) return;
   c.forEach(function(r){
-    entries.push({ id: nextId(), date: r.p.date, type: r.p.type, cat: r.p.cat, amount: r.p.amount, desc: r.p.desc });
+    var e = { id: nextId(), date: r.p.date, type: r.p.type, cat: r.p.cat, amount: r.p.amount, desc: r.p.desc };
+    var accRel = document.getElementById('releve-acc').value;
+    if(accRel) e.acc = accRel;
+    entries.push(e);
   });
   sortEntries();
   save().then(function(){
@@ -3628,6 +3756,249 @@ function confirmerNettoyage(){
         uiAlert('✅ ' + n + ' opération(s) de l\'entreprise retirée(s). L\'application ne suit plus que tes finances personnelles.');
       });
     });
+}
+
+/* ---------- comptes ----------
+   L'argent vit dans plusieurs poches (deux comptes Wave, Orange Money, banque,
+   liquide) ; un seul solde global ne disait pas dans laquelle etait une erreur.
+   Chaque operation peut porter un compte (`acc`). Un TRANSFERT deplace de l'argent
+   entre deux comptes sans etre ni gain ni depense : il vit dans `transfers`, a part.
+   Le pointage se fait compte par compte (`accCps`) ; la somme des comptes devient le
+   pointage global, ce qui garde intact tout le calcul du solde reel (soldeActuel).
+   Meme principe de marque que pour le pointage global : apres un pointage de compte,
+   seules les operations CREEES ensuite (id >= mark) et datees du jour du pointage ou
+   apres modifient son solde. */
+var COMPTES_DEFAUT = [
+  { id: 'wave1', name: 'Wave 151202' }, { id: 'wave2', name: 'Wave 5747' },
+  { id: 'om', name: 'Orange Money' }, { id: 'banque', name: 'Banque' }, { id: 'cash', name: 'Liquide' }
+];
+var comptes = COMPTES_DEFAUT.map(function(c){ return { id: c.id, name: c.name }; });
+var transfers = [];      // [{ id, date, from, to, amount, desc }]
+var accCps = {};         // id de compte -> { date, real, mark }
+var compteSaisie = '';   // compte choisi pour les saisies de l'Accueil (memorise)
+function saveComptes(){
+  return Promise.all([
+    storageSet('budget_accounts', JSON.stringify(comptes)),
+    storageSet('budget_transfers', JSON.stringify(transfers)),
+    storageSet('budget_acc_cps', JSON.stringify(accCps)),
+    storageSet('budget_acc_saisie', compteSaisie)
+  ]);
+}
+/* Les saisies de l'Accueil (et raccourcis, saisie avancee) vont dans le compte choisi. */
+function avecCompte(e){ if(compteSaisie) e.acc = compteSaisie; return e; }
+function compteNom(id){
+  var c = comptes.filter(function(x){ return x.id === id; })[0];
+  return c ? c.name : '';
+}
+function sanitizeComptes(list){
+  if(!Array.isArray(list)) return null;
+  var vus = {};
+  var out = list.filter(function(c){
+    if(!c || typeof c.id !== 'string' || !c.id || typeof c.name !== 'string' || !c.name.trim() || vus[c.id]) return false;
+    vus[c.id] = 1; return true;
+  }).map(function(c){ return { id: c.id, name: c.name.trim().slice(0, 30) }; });
+  return out.length ? out : null;
+}
+function sanitizeTransfers(list){
+  if(!Array.isArray(list)) return [];
+  return list.filter(function(t){
+    return t && /^\d{4}-\d{2}-\d{2}$/.test(t.date) && typeof t.from === 'string' && typeof t.to === 'string'
+      && t.from !== t.to && typeof t.amount === 'number' && t.amount > 0;
+  }).map(function(t){
+    return { id: typeof t.id === 'number' ? t.id : nextId(), date: t.date, from: t.from, to: t.to,
+             amount: Math.round(t.amount), desc: typeof t.desc === 'string' ? t.desc : '' };
+  });
+}
+function sanitizeAccCps(obj){
+  var out = {};
+  if(!obj || typeof obj !== 'object') return out;
+  Object.keys(obj).forEach(function(k){
+    var c = obj[k];
+    if(c && /^\d{4}-\d{2}-\d{2}$/.test(c.date) && typeof c.real === 'number' && typeof c.mark === 'number')
+      out[k] = { date: c.date, real: Math.round(c.real), mark: c.mark };
+  });
+  return out;
+}
+/* Une marque au-dessus de tout id deja attribue (cf. pushCheckpoint). */
+function nouvelleMarque(){
+  var now = Date.now() * 1000, plafond = now + 1000000, maxId = 0;
+  entries.concat(transfers).forEach(function(e){ if(e.id > maxId && e.id <= plafond) maxId = e.id; });
+  return Math.max(now, maxId + 1);
+}
+/* Solde d'un compte : son pointage + ce qui a bouge depuis ; sans pointage, la
+   somme de tout ce qui lui a ete rattache (depart a 0). */
+function compteSolde(id){
+  var cp = accCps[id], t = today();
+  var compte = function(x){ return cp ? (x.id >= cp.mark && x.date >= cp.date && x.date <= t) : x.date <= t; };
+  var s = cp ? cp.real : 0;
+  entries.forEach(function(e){ if(e.acc === id && compte(e)) s += e.type === 'gain' ? e.amount : -e.amount; });
+  transfers.forEach(function(x){
+    if(!compte(x)) return;
+    if(x.to === id) s += x.amount;
+    if(x.from === id) s -= x.amount;
+  });
+  return s;
+}
+/* Operations sans compte depuis le dernier pointage global : elles comptent dans le
+   solde total sans appartenir a aucune poche. */
+function sansCompteNet(){
+  var cp = lastCheckpoint(), t = today(), s = 0;
+  entries.forEach(function(e){
+    if(e.acc) return;
+    if(cp ? (e.id >= cp.mark && e.date >= cp.date && e.date <= t) : e.date <= t) s += e.type === 'gain' ? e.amount : -e.amount;
+  });
+  return s;
+}
+function addTransfer(from, to, amount, date, desc){
+  if(!compteNom(from) || !compteNom(to)) return 'Choisis deux comptes.';
+  if(from === to) return 'Choisis deux comptes différents.';
+  amount = Math.round(amount);
+  if(!(amount > 0)) return 'Montant invalide.';
+  transfers.push({ id: nextId(), date: date || today(), from: from, to: to, amount: amount, desc: desc || '' });
+  transfers.sort(function(a, b){ return b.date.localeCompare(a.date) || b.id - a.id; });
+  return null;
+}
+/* Pointage de tous les comptes d'un coup : `reels` = { id: montant }. Chaque compte
+   repart de son montant ; le total devient le pointage global (recordCheckpoint, qui
+   calcule l'ecart avec l'estimation). */
+function pointerComptes(reels){
+  var t = today(), mark = nouvelleMarque(), total = 0;
+  Object.keys(reels).forEach(function(id){
+    if(!compteNom(id)) return;
+    accCps[id] = { date: t, real: Math.round(reels[id]), mark: mark };
+    total += Math.round(reels[id]);
+  });
+  return total;
+}
+
+/* --- ecrans des comptes --- */
+var opsCompte = '';      // filtre de « Mes operations » sur un compte
+function renderAccChips(){
+  var box = document.getElementById('acc-chips');
+  if(!box) return;
+  box.innerHTML = '<span style="font-size:12px;color:var(--text-3)">Compte :</span>' +
+    [{ id: '', name: 'Aucun' }].concat(comptes).map(function(c){
+      var on = compteSaisie === c.id;
+      return '<button type="button" role="radio" aria-checked="' + on + '" class="acc-chip' + (on ? ' on' : '') + '" onclick="choisirCompte(\'' + c.id + '\')">' + esc(c.name) + '</button>';
+    }).join('');
+}
+function choisirCompte(id){
+  compteSaisie = id;
+  storageSet('budget_acc_saisie', id);
+  renderAccChips();
+}
+function renderComptes(){
+  var box = document.getElementById('comptes-list');
+  if(!box) return;
+  var t = today(), html = comptes.map(function(c){
+    var s = compteSolde(c.id), cp = accCps[c.id];
+    var age = cp ? daysBetween(cp.date, t) : null;
+    return '<button type="button" class="compte-row' + (opsCompte === c.id ? ' on' : '') + '" onclick="filtrerCompte(\'' + c.id + '\')">' +
+      '<span style="flex:1;min-width:0;text-align:left"><b>' + esc(c.name) + '</b><br><span style="font-size:12px;color:' +
+        (cp && age < POINT_DAYS ? 'var(--text-3)' : 'var(--warn)') + '">' +
+        (cp ? 'pointé ' + (age === 0 ? 'aujourd\'hui' : 'il y a ' + age + ' j') : 'jamais pointé') + '</span></span>' +
+      '<span class="' + (s < 0 ? 'dep-color' : '') + '" style="font-weight:700;white-space:nowrap">' + Math.round(s).toLocaleString('fr-FR') + ' F</span></button>';
+  }).join('');
+  var sc = sansCompteNet();
+  if(sc) html += '<div class="compte-row" style="cursor:default;opacity:.8"><span style="flex:1;text-align:left">Sans compte<br><span style="font-size:12px;color:var(--text-3)">saisies non rattachées depuis le pointage</span></span>' +
+    '<span style="font-weight:700">' + (sc > 0 ? '+' : '') + Math.round(sc).toLocaleString('fr-FR') + ' F</span></div>';
+  box.innerHTML = html;
+}
+function filtrerCompte(id){
+  opsCompte = opsCompte === id ? '' : id;
+  opsMax = OPS_PAS;
+  renderComptes();
+  renderOperations();
+  if(opsCompte) document.getElementById('lite-ops').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function optionsComptes(sel){
+  return comptes.map(function(c){ return '<option value="' + c.id + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('');
+}
+function dialogTransfert(){
+  var de = compteSaisie || comptes[0].id, vers = (comptes.filter(function(c){ return c.id !== de; })[0] || {}).id;
+  uiConfirm('<b>↔ Transfert entre tes comptes</b>' +
+    '<span style="display:block;font-size:12px;color:var(--text-3);margin-top:4px">Dépôt, retrait, Wave vers banque… Ce n\'est ni une dépense ni une entrée.</span>' +
+    '<label for="tr-from">De</label><select id="tr-from">' + optionsComptes(de) + '</select>' +
+    '<label for="tr-to">Vers</label><select id="tr-to">' + optionsComptes(vers) + '</select>' +
+    '<label for="tr-amount">Montant</label><input type="number" id="tr-amount" inputmode="numeric" min="1">' +
+    '<label for="tr-date">Date</label><input type="date" id="tr-date" value="' + today() + '">', 'Enregistrer', 'Annuler')
+  .then(function(ok){
+    if(!ok) return;
+    var err = addTransfer(document.getElementById('tr-from').value, document.getElementById('tr-to').value,
+      parseInt(document.getElementById('tr-amount').value, 10), document.getElementById('tr-date').value || today(), '');
+    if(err){ uiAlert(err); return; }
+    return saveComptes().then(renderAll);
+  });
+}
+function deleteTransfer(id){
+  uiConfirm('Supprimer ce transfert ?', 'Supprimer').then(function(ok){
+    if(!ok) return;
+    transfers = transfers.filter(function(x){ return x.id !== id; });
+    return saveComptes().then(renderAll);
+  });
+}
+function dialogPointerComptes(){
+  uiConfirm('<b>⚖️ Pointer mes comptes</b>' +
+    '<span style="display:block;font-size:12px;color:var(--text-3);margin-top:4px">Tape le solde réel affiché dans chaque appli (argent <b>personnel</b> seulement). Le total devient ton solde.</span>' +
+    comptes.map(function(c){
+      return '<label for="pc-' + c.id + '">' + esc(c.name) + '</label><input type="number" id="pc-' + c.id + '" inputmode="numeric" value="' + Math.round(Math.max(0, compteSolde(c.id))) + '">';
+    }).join(''), 'Valider', 'Annuler')
+  .then(function(ok){
+    if(!ok) return;
+    var reels = {};
+    for(var i = 0; i < comptes.length; i++){
+      var v = parseInt(document.getElementById('pc-' + comptes[i].id).value, 10);
+      if(isNaN(v)){ uiAlert('Montant manquant pour ' + esc(comptes[i].name) + '.'); return; }
+      reels[comptes[i].id] = v;
+    }
+    var total = pointerComptes(reels);
+    return saveComptes().then(function(){ return recordCheckpoint(total); }).then(renderAll);
+  });
+}
+/* Plus › Outils : renommer, ajouter, retirer un compte. */
+function renderGestionComptes(){
+  var box = document.getElementById('gestion-comptes');
+  if(!box) return;
+  box.innerHTML = comptes.map(function(c){
+    var n = entries.filter(function(e){ return e.acc === c.id; }).length + transfers.filter(function(x){ return x.from === c.id || x.to === c.id; }).length;
+    return '<div class="entry-item"><div class="entry-meta"><div class="entry-title">' + esc(c.name) + '</div>' +
+      '<div class="entry-cat">' + n + ' opération(s)</div></div>' +
+      '<button class="btn btn-sm" onclick="renommerCompte(\'' + c.id + '\')" aria-label="Renommer">✎</button>' +
+      '<button class="btn btn-danger btn-sm" onclick="retirerCompte(\'' + c.id + '\')" aria-label="Retirer">✕</button></div>';
+  }).join('');
+}
+function renommerCompte(id){
+  uiPrompt('Nouveau nom du compte :', compteNom(id)).then(function(v){
+    if(v === null) return;
+    v = String(v).trim().slice(0, 30);
+    if(!v){ uiAlert('Nom vide.'); return; }
+    comptes.forEach(function(c){ if(c.id === id) c.name = v; });
+    return saveComptes().then(renderAll);
+  });
+}
+function ajouterCompte(){
+  uiPrompt('Nom du nouveau compte (ex. Moov Money, Épargne) :', '').then(function(v){
+    if(v === null) return;
+    v = String(v).trim().slice(0, 30);
+    if(!v){ uiAlert('Nom vide.'); return; }
+    comptes.push({ id: 'c' + Date.now().toString(36), name: v });
+    return saveComptes().then(renderAll);
+  });
+}
+function retirerCompte(id){
+  var n = entries.filter(function(e){ return e.acc === id; }).length + transfers.filter(function(x){ return x.from === id || x.to === id; }).length;
+  if(comptes.length <= 1){ uiAlert('Il faut garder au moins un compte.'); return; }
+  uiConfirm('Retirer le compte <b>' + esc(compteNom(id)) + '</b> ?' + (n ? '\n<span style="font-size:12px;color:var(--text-3)">Ses ' + n + ' opération(s) restent, sans compte ; ses transferts sont supprimés.</span>' : ''), 'Retirer')
+  .then(function(ok){
+    if(!ok) return;
+    entries.forEach(function(e){ if(e.acc === id) delete e.acc; });
+    transfers = transfers.filter(function(x){ return x.from !== id && x.to !== id; });
+    delete accCps[id];
+    comptes = comptes.filter(function(c){ return c.id !== id; });
+    if(compteSaisie === id) compteSaisie = '';
+    if(opsCompte === id) opsCompte = '';
+    return Promise.all([saveComptes(), save()]).then(renderAll);
+  });
 }
 
 /* ---------- notes ---------- */
@@ -3770,6 +4141,24 @@ function renderSoldeDetail(){
       'S\'il ne correspond pas à ce que tu as vraiment (liquide + Wave + Orange Money + banque), corrige-le : l\'app repartira de ce montant.</div>' +
     '<button type="button" class="btn btn-primary" style="width:100%" onclick="startCheckpoint()">Corriger mon solde</button>' +
     (x.pointe ? '<div style="font-size:11px;color:var(--text-3);margin-top:8px">Pour info, le cumul brut de toutes tes saisies depuis le début est de ' + fmt(x.cumul) + '.</div>' : '');
+}
+/* Rappel de pointage : au-dela d'une semaine, les depenses oubliees font deriver
+   le solde affiche sans que rien ne le signale. « Plus tard » repousse de 2 jours. */
+var POINT_DAYS = 7, POINT_SNOOZE = 2, pointSnooze = null;
+function renderPointBanner(){
+  var b = document.getElementById('lite-point-banner');
+  if(!b) return;
+  var t = today(), cp = lastCheckpoint();
+  var age = cp ? daysBetween(cp.date, t) : null;
+  var due = entries.length && (!cp || age >= POINT_DAYS) && !(pointSnooze && pointSnooze > t);
+  b.style.display = due ? 'flex' : 'none';
+  if(due) document.getElementById('lite-point-text').innerHTML = cp
+    ? '⚖️ Dernier pointage il y a <b>' + age + ' jours</b> : compte ton argent pour garder un solde juste.'
+    : '⚖️ <b>Solde jamais pointé</b> : indique ton argent réel pour que le solde soit juste.';
+}
+function snoozePointage(){
+  pointSnooze = addDays(today(), POINT_SNOOZE);
+  storageSet('budget_point_snooze', pointSnooze).then(renderPointBanner);
 }
 function soldePermanent(){
   return sumType(entries, 'gain') - sumType(entries, 'depense');
@@ -3942,7 +4331,7 @@ function bilanHTML(P){
       : bilanLine('⚖️', 'Écarts de pointage : <b class="' + (b.ecart < 0 ? 'dep-color' : 'gain-color') + '">' +
           (b.ecart < 0 ? '−' : '+') + fmt(Math.abs(b.ecart)) + '</b> ' + (b.ecart < 0 ? 'de dépenses non saisies' : 'de rentrées non saisies'));
   } else if(!checkpoints.length){
-    L += bilanLine('⚖️', 'Pointe ton solde réel pour mesurer ce qui échappe à la saisie.', 'Bouton « Pointer mon solde » sur l\'écran principal');
+    L += bilanLine('⚖️', 'Pointe ton solde réel pour mesurer ce qui échappe à la saisie.', 'Bouton « Corriger mon solde » sous ton solde, sur l\'Accueil');
   }
   if(b.big){
     L += bilanLine('🔝', 'Plus grosse dépense : <b>' + esc(b.big.desc || b.big.cat) + '</b> — ' + fmt(b.big.amount),
@@ -4292,7 +4681,7 @@ function exportCSV(){
 }
 function backupBlob(){
   var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned,
-            learnedCats: learnedCats, checkpoints: checkpoints, customCats: customCats, recurrents: recurrents, recIgnored: recIgnored, notes: notes, proNames: proNames, exported_at: new Date().toISOString() };
+            learnedCats: learnedCats, checkpoints: checkpoints, customCats: customCats, recurrents: recurrents, recIgnored: recIgnored, notes: notes, proNames: proNames, comptes: comptes, transfers: transfers, accCps: accCps, exported_at: new Date().toISOString() };
   return new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
 }
 function backupName(){ return 'finances_backup_' + today() + '.json'; }
@@ -4412,8 +4801,11 @@ function isValidEntry(e){
 function sanitizeList(list){
   if(!Array.isArray(list)) return { clean: [], dropped: 0 };
   var clean = list.filter(isValidEntry).map(function(e){
-    return { id: typeof e.id === 'number' ? e.id : nextId(), date: e.date, type: e.type,
+    var x = { id: typeof e.id === 'number' ? e.id : nextId(), date: e.date, type: e.type,
       cat: e.cat, amount: Math.round(e.amount), desc: typeof e.desc === 'string' ? e.desc : '' };
+    if(typeof e.acc === 'string' && e.acc) x.acc = e.acc;
+    if(e.perso) x.perso = true;
+    return x;
   });
   return { clean: clean, dropped: list.length - clean.length };
 }
@@ -4494,6 +4886,13 @@ function importJSON(ev){
         planned.sort(function(a, b){ return a.date.localeCompare(b.date); });
         syncIdCounter();
         var RC = sanitizeRecurrents(d.recurrents), NT = sanitizeNotes(d.notes);
+        var CO = sanitizeComptes(d.comptes), TR = sanitizeTransfers(d.transfers), AC = sanitizeAccCps(d.accCps);
+        if(rep){ if(CO) comptes = CO; transfers = TR; accCps = AC; }
+        else {
+          (CO || []).forEach(function(c){ if(!compteNom(c.id)) comptes.push(c); });
+          TR.forEach(function(x){ if(!transfers.some(function(y){ return y.id === x.id; })) transfers.push(x); });
+          Object.keys(AC).forEach(function(k){ if(!accCps[k]) accCps[k] = AC[k]; });
+        }
         var PN = (d.proNames && typeof d.proNames === 'object') ? d.proNames : {};
         if(rep) proNames = PN; else Object.keys(PN).forEach(function(k){ proNames[k] = 1; });
         if(rep){ recurrents = RC; notes = NT; recIgnored = (d.recIgnored && typeof d.recIgnored === 'object') ? d.recIgnored : {}; }
@@ -4502,7 +4901,7 @@ function importJSON(ev){
           NT.forEach(function(x){ if(!notes.some(function(y){ return y.id === x.id; })) notes.push(x); });
         }
         soldeConnu = soldeActuel();   // une restauration n'est pas une depense : pas de question
-        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats(), saveRecurrents(), saveNotes(), saveProNames()]).then(function(){
+        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats(), saveRecurrents(), saveNotes(), saveProNames(), saveComptes()]).then(function(){
           updateCats();
           msg.style.color = GAIN_COL;
           msg.textContent = '✓ Restauré — ' + entries.length + ' entrée(s), ' + planned.length + ' prévision(s).';
@@ -4533,9 +4932,19 @@ function currentFilteredEntries(){
   var q = (document.getElementById('h-search').value || '').trim().toLowerCase();
   return q ? a0.filter(function(e){ return ((e.desc || '') + ' ' + e.cat).toLowerCase().indexOf(q) !== -1; }) : a0;
 }
+/* Afficher les milliers de lignes d'un coup prenait plus de 2 s sur un telephone
+   moyen (3 ans de saisies) : on les montre par HIST_PAS. Changer un filtre repart
+   de la premiere page. */
+var HIST_PAS = 50, histMax = HIST_PAS;
+function filtreHist(){ histMax = HIST_PAS; renderHist(); }
 function renderHist(){
   var arr = currentFilteredEntries();
-  renderEntryList('hist-list', arr);
+  renderEntryList('hist-list', arr.slice(0, histMax));
+  if(arr.length > histMax){
+    document.getElementById('hist-list').insertAdjacentHTML('beforeend',
+      '<button type="button" class="btn btn-sm" style="width:100%;margin-top:10px" onclick="histMax += HIST_PAS; renderHist()">' +
+      'Voir ' + Math.min(HIST_PAS, arr.length - histMax) + ' de plus (' + (arr.length - histMax) + ' restantes)</button>');
+  }
   document.getElementById('hist-count').textContent =
     arr.length + ' entrée(s) — Gains : ' + fmt(sumType(arr, 'gain')) + ' | Dépenses : ' + fmt(sumType(arr, 'depense'));
   var dc = document.getElementById('del-filtered-count');
@@ -4697,7 +5106,10 @@ function renderCurrentProTab(){
   else if(id === 'mois') renderMonth();
   else if(id === 'annee') renderYear();
   else if(id === 'budgets') renderBudgets();
-  else if(id === 'export'){ renderLastBackup(); renderNettoyage(); renderCustomCats(); renderReclass(); renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
+  else if(id === 'export'){
+    var ra = document.getElementById('releve-acc');
+    if(ra){ var v = ra.value; ra.innerHTML = '<option value="">Plusieurs comptes / inconnu</option>' + optionsComptes(v); }
+    renderGestionComptes(); renderLastBackup(); renderNettoyage(); renderCustomCats(); renderReclass(); renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
 }
 function populateSelects(){
   var now = new Date(), cy = now.getFullYear();

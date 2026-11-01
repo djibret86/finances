@@ -47,6 +47,8 @@ try {
     ok('« avant-hier »', lire('Taxi -2000 avant-hier')[3], '2026-10-18');
     ok('« lundi »', lire('Taxi -2000 lundi')[3], '2026-10-19');
     ok('« 12/08 »', lire('Achat -50000 12/08')[3], '2026-08-12');
+    ok('Date du jour sans année : cette année, même le matin', lire('Taxi -2000 20/10')[3], '2026-10-20');
+    ok('Demain sans année : l\'an passé (jamais dans le futur)', lire('Taxi -2000 21/10')[3], '2025-10-21');
     ok('« il y a 5 jours »', lire('Repas -4000 il y a 5 jours')[3], '2026-10-15');
     ok('Date impossible 31/02 ignorée', lire('Repas -4000 31/02') === null || lire('Repas -4000 31/02')[3] !== '2026-02-31', true);
 
@@ -208,6 +210,43 @@ try {
     ok('Ligne gardée : plus reproposée', proCandidates().length, 0);
     ok('Retrait : budget de l\'entreprise oublié', Object.keys(budgets), ['Alimentation']);
     proNames = {};
+
+    // --- Rappel de pointage ---
+    checkpoints = []; entries = [{ id: 1, date: '2026-10-01', type: 'gain', cat: 'Salaire', amount: 1000, desc: 'Salaire' }]; pointSnooze = null;
+    renderPointBanner();
+    ok('Jamais pointé : rappel affiché', document.getElementById('lite-point-banner').style.display, 'flex');
+    checkpoints = [{ date: '2026-10-17', real: 1000, mark: 10, ecart: null, recorded: false }];
+    renderPointBanner();
+    ok('Pointé il y a 3 jours : pas de rappel', document.getElementById('lite-point-banner').style.display, 'none');
+    checkpoints = [{ date: '2026-10-10', real: 1000, mark: 10, ecart: null, recorded: false }];
+    renderPointBanner();
+    ok('Pointé il y a 10 jours : rappel', document.getElementById('lite-point-banner').style.display, 'flex');
+    pointSnooze = '2026-10-22';
+    renderPointBanner();
+    ok('« Plus tard » : rappel repoussé', document.getElementById('lite-point-banner').style.display, 'none');
+    pointSnooze = null; checkpoints = [];
+
+    // --- Comptes ---
+    ok('5 comptes par défaut', comptes.map(c => c.name), ['Wave 151202', 'Wave 5747', 'Orange Money', 'Banque', 'Liquide']);
+    entries = [
+      { id: 1, date: '2026-10-05', type: 'gain', cat: 'Salaire', amount: 140800, desc: 'Salaire', acc: 'banque' },
+      { id: 2, date: '2026-10-06', type: 'depense', cat: 'Alimentation', amount: 4300, desc: 'Maquis', acc: 'wave2' },
+      { id: 3, date: '2026-10-07', type: 'depense', cat: 'Transport', amount: 2000, desc: 'Taxi' }
+    ];
+    transfers = []; accCps = {}; checkpoints = [];
+    ok('Transfert refusé vers le même compte', addTransfer('wave2', 'wave2', 1000, '2026-10-08'), 'Choisis deux comptes différents.');
+    ok('Transfert accepté', addTransfer('banque', 'wave2', 20000, '2026-10-08'), null);
+    ok('Soldes par compte sans pointage', [compteSolde('banque'), compteSolde('wave2'), compteSolde('cash')], [120800, 15700, 0]);
+    ok('Un transfert ne change pas le solde total', soldeActuel(), 140800 - 4300 - 2000);
+    // pointage compte par compte
+    const total = pointerComptes({ wave1: 5, wave2: 13639, om: 0, banque: 593365, cash: 25000 });
+    ok('Pointage : total des comptes', total, 632009);
+    const mk = accCps.wave2.mark;
+    entries.push({ id: mk + 1, date: today(), type: 'depense', cat: 'Alimentation', amount: 639, desc: 'Pain', acc: 'wave2' });
+    entries.push({ id: mk - 5, date: today(), type: 'depense', cat: 'Alimentation', amount: 9999, desc: 'Saisie d\'avant', acc: 'wave2' });
+    transfers.push({ id: mk + 2, date: today(), from: 'wave2', to: 'cash', amount: 3000, desc: '' });
+    ok('Après pointage : seules les opérations créées ensuite comptent', [compteSolde('wave2'), compteSolde('cash')], [13639 - 639 - 3000, 28000]);
+    transfers = []; accCps = {};
 
     // --- Notes ---
     ok('Notes valides seulement', sanitizeNotes([{ id: 1, date: '2026-10-20', text: 'Rembourser Koffi' }, { date: 'x', text: 'a' }, { id: 3, date: '2026-10-21', text: '  ' }]).length, 1);
