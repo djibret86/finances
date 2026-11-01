@@ -18,7 +18,9 @@ concurrency:
 jobs:
   controle:
     name: Contrôle interne
-    runs-on: ubuntu-latest
+    # Version fixée : Playwright 1.56 ne sait pas installer Chromium sur
+    # ubuntu-26.04, devenue « ubuntu-latest » fin octobre 2026.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
