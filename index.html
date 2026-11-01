@@ -214,6 +214,12 @@ body{
 .ops-month:first-child{padding-top:0}
 #lite-ops .entry-item + .ops-month{border-top:none}
 
+/* ---------- Comparaison avec un releve ------------------- */
+.pro-btn{flex:0 0 auto;min-height:32px;padding:0 8px;font-size:12px;border-radius:999px}
+.pro-btn.on{background:var(--surface-2);border-color:var(--text-3)}
+.releve-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid var(--line-soft);font-size:14px;
+  text-transform:none;letter-spacing:0;color:var(--text);margin:0;font-weight:400}
+
 /* ---------- Notes ---------------------------------------- */
 .note-item{padding:12px 14px;border:1px solid var(--line-soft);border-radius:14px;background:var(--surface-3)}
 
@@ -970,6 +976,31 @@ details[open] summary::after{transform:rotate(-135deg)}
          et disparait definitivement une fois la revision close. -->
     <!-- Reclassement : regroupe les entrees « Autre » (et l'alcool encore range en
          Alimentation) par mot, pour les classer d'un geste. Invisible s'il n'y a rien. -->
+    <div class="card" id="pro-clean-card" style="display:none">
+      <div class="section-title">Retirer les opérations de l'entreprise</div>
+      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
+        Cette application suit tes finances <b>personnelles</b>. Voici les ventes, achats de matières premières,
+        stock et paiements marqués « Pro » trouvés dans tes entrées. <b>Décoche</b> celles qui sont vraiment personnelles.
+      </div>
+      <div id="pro-clean-list"></div>
+      <div id="pro-clean-sum" style="font-size:13px;margin:10px 0"></div>
+      <button class="btn btn-danger" id="pro-clean-btn" style="width:100%" onclick="confirmerNettoyage()"></button>
+    </div>
+
+    <div class="card" id="releve-card">
+      <div class="section-title">Comparer avec un relevé</div>
+      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
+        Colle les opérations de ta banque ou de Wave, une par ligne, avec la date à la fin.
+        <b>Mets + devant les entrées d'argent.</b> L'app repère ce qui est déjà saisi et te propose le reste.
+        Touche <b>Pro ?</b> sur un paiement de ton entreprise : il ne sera jamais compté, et l'app s'en souviendra.
+      </div>
+      <textarea id="releve-input" rows="5" placeholder="Maquis Sandy -4300 28/10&#10;De Doudou +16000 31/10&#10;Dépôt +20000 27/10" style="font-family:inherit;font-size:15px;line-height:1.5"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button class="btn btn-primary btn-sm" onclick="runReleve()">Comparer</button>
+      </div>
+      <div id="releve-result" style="margin-top:10px"></div>
+    </div>
+
     <div class="card">
       <div class="section-title">Mes catégories</div>
       <div class="entry-list" id="custom-cat-list" style="max-height:none;margin-bottom:12px"></div>
@@ -1153,8 +1184,8 @@ details[open] summary::after{transform:rotate(-135deg)}
 "use strict";
 
 var CATS = {
-  gain: ['Salaire','Vente','Remboursement','Bonus','Investissement','Emprunt & aide','Solde initial','Autre'],
-  depense: ['Achat','Alimentation','Alcool','Transport','Logement','Santé','Éducation','Famille & fêtes','Soins & services','Communication','Loisirs','Fournitures','Matières premières','Prêts/Emprunts','Impôts','Extra','Autre']
+  gain: ['Salaire','Remboursement','Bonus','Investissement','Emprunt & aide','Solde initial','Autre'],
+  depense: ['Achat','Alimentation','Alcool','Transport','Logement','Santé','Éducation','Famille & fêtes','Soins & services','Communication','Loisirs','Fournitures','Prêts/Emprunts','Impôts','Extra','Autre']
 };
 var MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 /* Valeurs de repli : readTheme() les remplace par les jetons de la feuille
@@ -1165,7 +1196,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v19';
+var APP_VERSION = 'v20';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Alcool':'#A23B5A','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1248,13 +1279,16 @@ var CAT_ICONS = {
 var AUTO_CAT = {
   gain: [
     ['Salaire',['salaire','paie','paye','traitement','perdiem','perdiems','per diem']],
-    ['Vente',['vente','saveur','liqueur','client','ananas','citron','bissap','corossol','passion','mandarine']],
     ['Remboursement',['rembours']],
     ['Bonus',['bonus','prime','gratif']],
     ['Investissement',['invest','dividende','intérêt','interet','profit','brvm','action']]
   ],
   depense: [
-    ['Achat',['achat','acheté','achete','approvisionnement','appro','stock','fournisseur','marchandise','revente','réassort','reassort']],
+    /* Application dediee aux depenses PERSONNELLES (v20) : ventes, matieres
+       premieres, stock et fournisseurs relevent de l'entreprise, geree ailleurs.
+       Leurs categories et mots-cles sont retires ; les couleurs et icones restent
+       pour afficher proprement les anciennes entrees. */
+    ['Achat',['achat','acheté','achete']],
     /* Vocabulaire local : sans lui, 85 % des libellés réellement tapés
        tombaient dans « Autre ». */
     ['Éducation',['école','ecole','scolarité','scolarite','scolaire','inscription','universit',
@@ -1283,8 +1317,8 @@ var AUTO_CAT = {
        « vinaigre », d'ou ce mot ajoute plus bas en Alimentation (le plus long gagne). */
     ['Alcool',['bière','biere','beer','vin','whisky','rhum','alcool','vodka','champagne','pastis','cognac',
       'apéro','apero','pinte','bangui','koutoukou','tchapalo','flag','castel','guinness','heineken',
-      '33 export','beaufort','tuborg','desperados','kronenbourg','hennessy','martini','baileys','jack daniel']],
-    ['Alimentation',['vinaigre','resto','restaurant','repas','nourriture','manger','déjeuner','diner','dîner','brunch','café','cafe','pain','marché','marche','super','supermarché','supermarche','boutique','shop','courses','food','snack','maquis','drink','boisson','eau','jus','oeuf','œuf','oeufs','lait','riz','attiéké','attieke','poulet','poisson','viande','légume','legume','fruit','tomate','oignon','banane','plantain','sucre','sel','huile','farine','yaourt','fromage','beurre','chocolat','biscuit','gâteau','gateau','bonbon',
+      '33 export','beaufort','tuborg','desperados','kronenbourg','hennessy','martini','baileys','jack daniel','liqueur']],
+    ['Alimentation',['vinaigre','bouffe','carrefour','resto','restaurant','repas','nourriture','manger','déjeuner','diner','dîner','brunch','café','cafe','pain','marché','marche','super','supermarché','supermarche','boutique','shop','courses','food','snack','maquis','drink','boisson','eau','jus','oeuf','œuf','oeufs','lait','riz','attiéké','attieke','poulet','poisson','viande','légume','legume','fruit','tomate','oignon','banane','plantain','sucre','sel','huile','farine','yaourt','fromage','beurre','chocolat','biscuit','gâteau','gateau','bonbon',
       'tangana','dibiterie','gargotte','gargote','thiebou','ceebu','yassa','mafé','mafe','sandwich','chawarma','chawarma','fataya','ndambe',
       'thiakry','bissap jus','bouye','ditakh','arachide','mil','mais','maïs','manioc','patate','gombo','niebe','niébé','poivron','piment','ail','gingembre']],
     ['Transport',['taxi','transport','carburant','essence','gasoil','lavage','auto','voiture','bus','moto','parking','uber','yango','heetch','fret',
@@ -1302,7 +1336,6 @@ var AUTO_CAT = {
       'woyofal','senelec','sde ','sen eau','ontea','bonbonne','gaz','charbon','bois','eau courante','caution','peinture','maçon','macon','menuisier','soudeur','quittance']],
     ['Loisirs',['cinéma','cinema','sport','loisir','jeu','sortie','voyage','hôtel','hotel','vacance','playstation','xbox','nintendo','netflix','spotify','youtube','canal','dstv','streaming','abonnement','disney']],
     ['Fournitures',['bureau','papier','fourniture','matériel','materiel']],
-    ['Matières premières',['matière première','matiere premiere','fruits de la passion','passion','ananas','citron','bissap','corossol','mandarine','liqueur','saveur','mangoustan','ingrédient','ingredient','ferment','étiquette','etiquette','bouteille vide','capsule','thermocapsule']],
     ['Prêts/Emprunts',['prêt','pret','emprunt','dette']],
     ['Impôts',['impôt','impot','taxe','fiscale','dgi']]
   ]
@@ -1471,6 +1504,9 @@ function load(){
     return storageGet('budget_notes');
   }).then(function(r){
     if(r && r.value){ try { notes = sanitizeNotes(JSON.parse(r.value)); } catch(e){} }
+    return storageGet('budget_pro_names');
+  }).then(function(r){
+    if(r && r.value){ try { proNames = JSON.parse(r.value) || {}; } catch(e){} }
     soldeConnu = soldeActuel();
     setStorageStatus(true);
   });
@@ -3400,6 +3436,200 @@ function renderNegBanner(){
   if(s < 0) document.getElementById('lite-neg-text').textContent = 'Solde négatif (' + fmt(s) + ') : d\'où vient l\'argent ?';
 }
 
+/* ---------- comparaison avec un releve (banque, Wave) ----------
+   Les releves connaissent chaque paiement ; l'app, seulement ce qu'on a pense a
+   taper. On colle le releve, l'app apparie chaque ligne a une entree existante
+   (meme sens, meme montant, a 2 jours pres, chaque entree servant une seule fois,
+   la plus proche en date d'abord) et propose d'ajouter le reste.
+   Depots, retraits et transferts entre ses propres comptes deplacent son argent
+   sans le depenser : marques « interne » et decoches par defaut, sinon ils
+   compteraient comme gains ou depenses. */
+var RELEVE = [];
+var RELEVE_INTERNE = /(^|[\s'’])(d[ée]p[ôo]t|retrait|transferts?|vers carte|depuis carte)(?=[\s,.]|$)/i;
+var RELEVE_JOURS = 2;
+/* Paiements de l'entreprise recus sur le mobile money : ils sont geres par une
+   autre app et ne doivent jamais entrer dans les comptes perso. On retient le nom
+   de l'emetteur ou du beneficiaire (« De Fifi » -> « fifi ») marque « Pro » : au
+   releve suivant, ses lignes sont mises de cote d'office. */
+var proNames = {};
+function saveProNames(){ return storageSet('budget_pro_names', JSON.stringify(proNames)); }
+function proKey(desc){
+  return String(desc || '').toLowerCase()
+    .replace(/^\s*(de|d'|d’|à|a|vers|paiement|transfert)\s+/, '')
+    .replace(/\s+/g, ' ').trim();
+}
+function estPro(desc){ var k = proKey(desc); return !!(k && proNames[k]); }
+function toggleProReleve(i){
+  var r = RELEVE[i];
+  if(!r || !r.p) return;
+  var k = proKey(r.p.desc);
+  if(!k) return;
+  if(proNames[k]) delete proNames[k]; else proNames[k] = 1;
+  saveProNames().then(runReleve);
+}
+function compareReleve(texte){
+  var pris = {}, res = [];
+  String(texte || '').split('\n').forEach(function(l){
+    var ligne = l.trim();
+    if(!ligne) return;
+    var p = parseEntryLine(ligne, today());
+    if(!p){ res.push({ ligne: ligne, etat: 'illisible', coche: false }); return; }
+    var meilleur = null, ecart = 99;
+    entries.forEach(function(e){
+      if(pris[e.id] || e.type !== p.type || Math.round(e.amount) !== Math.round(p.amount)) return;
+      var j = Math.abs(daysBetween(e.date, p.date));
+      if(j <= RELEVE_JOURS && j < ecart){ meilleur = e; ecart = j; }
+    });
+    if(meilleur) pris[meilleur.id] = 1;
+    var interne = RELEVE_INTERNE.test(p.desc), pro = estPro(p.desc);
+    res.push({ ligne: ligne, p: p, match: meilleur, pro: pro,
+      etat: meilleur ? 'saisi' : pro ? 'pro' : interne ? 'interne' : 'manquant',
+      coche: !meilleur && !pro && !interne });
+  });
+  return res;
+}
+function runReleve(){
+  RELEVE = compareReleve(document.getElementById('releve-input').value);
+  renderReleve();
+}
+function renderReleve(){
+  var box = document.getElementById('releve-result');
+  if(!box) return;
+  if(!RELEVE.length){ box.innerHTML = '<div class="empty">Colle au moins une ligne, puis appuie sur Comparer.</div>'; return; }
+  var n = { saisi: 0, manquant: 0, interne: 0, pro: 0, illisible: 0 };
+  RELEVE.forEach(function(r){ n[r.etat]++; });
+  var html = '<div style="font-size:13px;margin-bottom:8px"><b class="gain-color">✔ ' + n.saisi + ' déjà saisie(s)</b> · ' +
+    '<b class="dep-color">✚ ' + n.manquant + ' manquante(s)</b>' + (n.interne ? ' · ↔ ' + n.interne + ' interne(s)' : '') +
+    (n.pro ? ' · 🏢 ' + n.pro + ' pro' : '') +
+    (n.illisible ? ' · ⚠ ' + n.illisible + ' illisible(s)' : '') + '</div>';
+  html += RELEVE.map(function(r, i){
+    if(r.etat === 'illisible'){
+      return '<div class="releve-row" style="color:var(--dep-strong)">⚠ <b>' + esc(r.ligne) + '</b> — montant introuvable</div>';
+    }
+    var p = r.p, montant = '<span class="' + (p.type === 'gain' ? 'gain-color' : 'dep-color') + '" style="font-weight:700;white-space:nowrap">' +
+      (p.type === 'gain' ? '+' : '−') + Math.round(p.amount).toLocaleString('fr-FR') + '</span>';
+    var titre = '<div style="flex:1;min-width:0"><div style="font-weight:550">' + esc(p.desc) + '</div><div style="font-size:12px;color:var(--text-3)">' + fmtDateFR(p.date) + ' · ';
+    if(r.etat === 'saisi'){
+      return '<div class="releve-row"><span class="gain-color" aria-label="Déjà saisi">✔</span>' + titre +
+        'déjà saisi : « ' + esc(r.match.desc || r.match.cat) + ' » du ' + fmtDateFR(r.match.date) +
+        (r.pro ? ' <span class="dep-color">· ⚠ nom marqué Pro : vérifie cette entrée</span>' : '') + '</div></div>' + montant + '</div>';
+    }
+    var proBtn = '<button type="button" class="btn btn-sm pro-btn' + (r.etat === 'pro' ? ' on' : '') + '" onclick="event.preventDefault(); toggleProReleve(' + i + ')"' +
+      ' title="' + (r.etat === 'pro' ? 'Remettre en perso' : 'Paiement de l\'entreprise : ne pas compter') + '">' + (r.etat === 'pro' ? '🏢 Pro' : 'Pro ?') + '</button>';
+    if(r.etat === 'pro'){
+      return '<div class="releve-row" style="opacity:.75"><span aria-label="Entreprise">🏢</span>' + titre +
+        'entreprise : géré dans une autre app, pas ajouté</div></div>' + montant + proBtn + '</div>';
+    }
+    return '<label class="releve-row" style="cursor:pointer"><input type="checkbox"' + (r.coche ? ' checked' : '') +
+      ' onchange="RELEVE[' + i + '].coche = this.checked; majReleveBouton()" style="width:22px;height:22px;min-height:0;flex:0 0 auto">' +
+      titre + (r.etat === 'interne' ? 'mouvement entre tes comptes, pas une dépense' : '→ ' + esc(p.cat)) + '</div></div>' + montant + proBtn + '</label>';
+  }).join('');
+  html += '<button class="btn btn-primary" id="releve-add" style="width:100%;margin-top:12px" onclick="addReleve()"></button>' +
+    '<div id="releve-msg" style="font-size:13px;margin-top:8px"></div>';
+  box.innerHTML = html;
+  majReleveBouton();
+}
+function majReleveBouton(){
+  var b = document.getElementById('releve-add');
+  if(!b) return;
+  var c = RELEVE.filter(function(r){ return r.coche; });
+  b.disabled = !c.length;
+  b.textContent = c.length ? 'Ajouter les ' + c.length + ' opération(s) cochée(s)' : 'Rien à ajouter';
+}
+function addReleve(){
+  var c = RELEVE.filter(function(r){ return r.coche && r.p; });
+  if(!c.length) return;
+  c.forEach(function(r){
+    entries.push({ id: nextId(), date: r.p.date, type: r.p.type, cat: r.p.cat, amount: r.p.amount, desc: r.p.desc });
+  });
+  sortEntries();
+  save().then(function(){
+    renderAll();
+    RELEVE = compareReleve(document.getElementById('releve-input').value);   // les ajoutees passent en ✔
+    renderReleve();
+    var m = document.getElementById('releve-msg');
+    if(m){ m.style.color = GAIN_COL; m.textContent = '✓ ' + c.length + ' opération(s) ajoutée(s).'; }
+  });
+}
+
+/* ---------- retirer les operations de l'entreprise ----------
+   Les ventes, achats de matieres premieres, stock et paiements recus de clients
+   faussaient le budget perso. On les retrouve (anciennes categories, mots de
+   l'activite, noms marques « Pro »), l'utilisateur decoche ce qui est vraiment
+   personnel, puis on les retire (apres une sauvegarde proposee). */
+var PRO_CATS = ['Vente', 'Matières premières'];
+var PRO_MOTS = /(stock|fournisseur|marchandise|revente|r[ée]assort|approvisionnement|(^|\s)appro(\s|$)|saveur|client|mati[eè]res? premi[eè]res?|[ée]tiquette|thermocapsule|capsule|bouteille vide|mangoustan|ferment)/i;
+var NETTOYAGE = [];
+function proCandidates(){
+  return entries.filter(function(e){
+    if(e.perso) return false;          // gardee comme personnelle lors d'un nettoyage
+    return PRO_CATS.indexOf(e.cat) !== -1 || PRO_MOTS.test(e.desc || '') || estPro(e.desc);
+  });
+}
+function renderNettoyage(){
+  var card = document.getElementById('pro-clean-card');
+  if(!card) return;
+  NETTOYAGE = proCandidates().map(function(e){ return { e: e, coche: true }; });
+  var plannedPro = planned.filter(function(p){ return PRO_CATS.indexOf(p.cat) !== -1 || PRO_MOTS.test(p.desc || ''); }).length;
+  if(!NETTOYAGE.length && !plannedPro){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  document.getElementById('pro-clean-list').innerHTML = NETTOYAGE.map(function(x, i){
+    var e = x.e;
+    return '<label class="releve-row" style="cursor:pointer"><input type="checkbox" checked onchange="NETTOYAGE[' + i + '].coche = this.checked; majNettoyage()" style="width:22px;height:22px;min-height:0;flex:0 0 auto">' +
+      '<div style="flex:1;min-width:0"><div style="font-weight:550">' + esc(e.desc || e.cat) + '</div>' +
+      '<div style="font-size:12px;color:var(--text-3)">' + esc(e.cat) + ' · ' + fmtDateFR(e.date) + '</div></div>' +
+      '<span class="' + (e.type === 'gain' ? 'gain-color' : 'dep-color') + '" style="font-weight:700;white-space:nowrap">' +
+        (e.type === 'gain' ? '+' : '−') + Math.round(e.amount).toLocaleString('fr-FR') + '</span></label>';
+  }).join('') + (plannedPro ? '<div style="font-size:12px;color:var(--text-3);margin-top:8px">+ ' + plannedPro + ' prévision(s) de l\'entreprise, retirées aussi.</div>' : '');
+  majNettoyage();
+}
+function majNettoyage(){
+  var b = document.getElementById('pro-clean-btn');
+  if(!b) return;
+  var c = NETTOYAGE.filter(function(x){ return x.coche; });
+  var g = c.filter(function(x){ return x.e.type === 'gain'; }).reduce(function(s, x){ return s + x.e.amount; }, 0);
+  var d = c.filter(function(x){ return x.e.type === 'depense'; }).reduce(function(s, x){ return s + x.e.amount; }, 0);
+  document.getElementById('pro-clean-sum').textContent = c.length
+    ? c.length + ' cochée(s) : ' + fmt(g) + ' d\'entrées et ' + fmt(d) + ' de dépenses de l\'entreprise.'
+    : 'Rien de coché.';
+  b.textContent = 'Retirer les ' + c.length + ' opération(s) cochée(s)';
+  b.disabled = !c.length && !planned.some(function(p){ return PRO_CATS.indexOf(p.cat) !== -1 || PRO_MOTS.test(p.desc || ''); });
+}
+/* Retire de l'app : entrees cochees, previsions et budgets de l'entreprise, regles
+   apprises qui menaient a ses categories. Renvoie le nombre d'entrees retirees. */
+function retirerPro(ids){
+  var aRetirer = {};
+  ids.forEach(function(id){ aRetirer[id] = 1; });
+  /* Les lignes decochees sont personnelles : on les sort des anciennes categories
+     de l'entreprise et on les marque, pour ne plus les reproposer. */
+  proCandidates().forEach(function(e){
+    if(aRetirer[e.id]) return;
+    e.perso = true;
+    if(PRO_CATS.indexOf(e.cat) !== -1) e.cat = autoCat(e.desc || '', e.type);
+  });
+  var avant = entries.length;
+  entries = entries.filter(function(e){ return !aRetirer[e.id]; });
+  planned = planned.filter(function(p){ return PRO_CATS.indexOf(p.cat) === -1 && !PRO_MOTS.test(p.desc || ''); });
+  PRO_CATS.forEach(function(c){ delete budgets[c]; });
+  Object.keys(learnedCats).forEach(function(k){ if(PRO_CATS.indexOf(learnedCats[k]) !== -1) delete learnedCats[k]; });
+  return avant - entries.length;
+}
+function confirmerNettoyage(){
+  var ids = NETTOYAGE.filter(function(x){ return x.coche; }).map(function(x){ return x.e.id; });
+  uiChoice('Retirer <b>' + ids.length + ' opération(s)</b> de l\'entreprise de cette application ?' +
+    '\n<span style="font-size:12px;color:var(--text-3)">Elles sont gérées dans ton autre app. Fais d\'abord une sauvegarde si tu veux pouvoir les retrouver.</span>',
+    'Retirer', 'Sauvegarder d\'abord', 'Annuler').then(function(choix){
+      if(choix === 'alt'){ shareBackup(); return; }
+      if(choix !== 'ok') return;
+      var n = retirerPro(ids);
+      soldeConnu = soldeActuel();   // un nettoyage n'est pas une depense : pas de question
+      return Promise.all([save(), savePlanned(), saveBudgets(), saveLearned()]).then(function(){
+        renderAll();
+        uiAlert('✅ ' + n + ' opération(s) de l\'entreprise retirée(s). L\'application ne suit plus que tes finances personnelles.');
+      });
+    });
+}
+
 /* ---------- notes ---------- */
 var notes = [];          // [{ id, date, text }]
 var editingNote = null;
@@ -4062,7 +4292,7 @@ function exportCSV(){
 }
 function backupBlob(){
   var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned,
-            learnedCats: learnedCats, checkpoints: checkpoints, customCats: customCats, recurrents: recurrents, recIgnored: recIgnored, notes: notes, exported_at: new Date().toISOString() };
+            learnedCats: learnedCats, checkpoints: checkpoints, customCats: customCats, recurrents: recurrents, recIgnored: recIgnored, notes: notes, proNames: proNames, exported_at: new Date().toISOString() };
   return new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
 }
 function backupName(){ return 'finances_backup_' + today() + '.json'; }
@@ -4264,13 +4494,15 @@ function importJSON(ev){
         planned.sort(function(a, b){ return a.date.localeCompare(b.date); });
         syncIdCounter();
         var RC = sanitizeRecurrents(d.recurrents), NT = sanitizeNotes(d.notes);
+        var PN = (d.proNames && typeof d.proNames === 'object') ? d.proNames : {};
+        if(rep) proNames = PN; else Object.keys(PN).forEach(function(k){ proNames[k] = 1; });
         if(rep){ recurrents = RC; notes = NT; recIgnored = (d.recIgnored && typeof d.recIgnored === 'object') ? d.recIgnored : {}; }
         else {
           RC.forEach(function(x){ if(!recurrents.some(function(y){ return y.id === x.id; })) recurrents.push(x); });
           NT.forEach(function(x){ if(!notes.some(function(y){ return y.id === x.id; })) notes.push(x); });
         }
         soldeConnu = soldeActuel();   // une restauration n'est pas une depense : pas de question
-        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats(), saveRecurrents(), saveNotes()]).then(function(){
+        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats(), saveRecurrents(), saveNotes(), saveProNames()]).then(function(){
           updateCats();
           msg.style.color = GAIN_COL;
           msg.textContent = '✓ Restauré — ' + entries.length + ' entrée(s), ' + planned.length + ' prévision(s).';
@@ -4465,7 +4697,7 @@ function renderCurrentProTab(){
   else if(id === 'mois') renderMonth();
   else if(id === 'annee') renderYear();
   else if(id === 'budgets') renderBudgets();
-  else if(id === 'export'){ renderLastBackup(); renderCustomCats(); renderReclass(); renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
+  else if(id === 'export'){ renderLastBackup(); renderNettoyage(); renderCustomCats(); renderReclass(); renderRepair(); renderCheckpoints(); renderLearned(); renderHist(); }
 }
 function populateSelects(){
   var now = new Date(), cy = now.getFullYear();
