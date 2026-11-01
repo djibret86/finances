@@ -125,6 +125,18 @@ try {
       { id: 2, date: '2026-10-20', type: 'depense', cat: 'Logement', amount: 150000, desc: 'Loyer' }
     ];
     ok('Solde permanent négatif possible', soldePermanent(), -50000);
+    ok('Sans pointage, le solde affiché = le cumul', soldeActuel(), -50000);
+    /* Pointage le 15/10 à 665 000 F : seules les saisies créées APRÈS comptent. */
+    checkpoints = [{ date: '2026-10-15', real: 665000, mark: 100, ecart: null, recorded: false }];
+    entries.push({ id: 101, date: '2026-10-18', type: 'depense', cat: 'Transport', amount: 5000, desc: 'Taxi' });
+    entries.push({ id: 50, date: '2026-10-18', type: 'depense', cat: 'Transport', amount: 9999, desc: 'Saisie d\'avant le pointage' });
+    ok('Avec pointage, le solde affiché = argent réel', soldeActuel(), 660000);
+    const det = soldeDetail();
+    ok('Détail : départ, entrées, dépenses', [det.depart, det.g, det.d, det.pointe], [665000, 0, 5000, true]);
+    ok('Détail : mois par mois', det.mois, [{ mois: '2026-10', g: 0, d: 5000 }]);
+    ok('Départ + entrées − dépenses = solde affiché', det.depart + det.g - det.d, soldeActuel());
+    ok('Filtre « depuis le pointage »', getEntries({ minId: 100, from: '2026-10-15', to: '2026-10-20', type: 'depense' }).map(e => e.id), [101]);
+    checkpoints = [];
 
     // --- Opérations récurrentes ---
     planned = []; recurrents = []; recIgnored = {};
