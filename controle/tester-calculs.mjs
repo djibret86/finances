@@ -209,6 +209,21 @@ try {
     ok('Retrait : budget de l\'entreprise oublié', Object.keys(budgets), ['Alimentation']);
     proNames = {};
 
+    // --- Rappel de pointage ---
+    checkpoints = []; entries = [{ id: 1, date: '2026-10-01', type: 'gain', cat: 'Salaire', amount: 1000, desc: 'Salaire' }]; pointSnooze = null;
+    renderPointBanner();
+    ok('Jamais pointé : rappel affiché', document.getElementById('lite-point-banner').style.display, 'flex');
+    checkpoints = [{ date: '2026-10-17', real: 1000, mark: 10, ecart: null, recorded: false }];
+    renderPointBanner();
+    ok('Pointé il y a 3 jours : pas de rappel', document.getElementById('lite-point-banner').style.display, 'none');
+    checkpoints = [{ date: '2026-10-10', real: 1000, mark: 10, ecart: null, recorded: false }];
+    renderPointBanner();
+    ok('Pointé il y a 10 jours : rappel', document.getElementById('lite-point-banner').style.display, 'flex');
+    pointSnooze = '2026-10-22';
+    renderPointBanner();
+    ok('« Plus tard » : rappel repoussé', document.getElementById('lite-point-banner').style.display, 'none');
+    pointSnooze = null; checkpoints = [];
+
     // --- Notes ---
     ok('Notes valides seulement', sanitizeNotes([{ id: 1, date: '2026-10-20', text: 'Rembourser Koffi' }, { date: 'x', text: 'a' }, { id: 3, date: '2026-10-21', text: '  ' }]).length, 1);
     return r;
