@@ -155,6 +155,12 @@ body{
   padding:22px 20px;box-shadow:var(--sh-2);
 }
 .hero-label{font-size:13px;color:var(--hero-sub)}
+.hero-solde-btn{display:block;width:100%;padding:0;border:none;background:none;color:inherit;text-align:left;font-family:inherit;cursor:pointer}
+.hero-fix{
+  display:inline-flex;align-items:center;min-height:36px;margin:0 0 14px;padding:0 12px;
+  border:1px solid var(--hero-line);border-radius:999px;background:var(--hero-tile);
+  color:var(--hero-text);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;
+}
 .hero-solde{
   font-size:clamp(34px,11vw,44px);font-weight:800;letter-spacing:-.02em;line-height:1.1;
   margin:4px 0 16px;color:var(--hero-text);transition:color .2s var(--ease);
@@ -642,9 +648,12 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 
   <div class="card hero">
-    <div class="hero-label">Solde permanent <span style="opacity:.8">· toutes tes entrées moins toutes tes sorties</span></div>
-    <div class="hero-solde" id="lite-solde">0 F</div>
-    <div id="lite-global-sub" style="font-size:12px;color:var(--hero-sub);margin:-10px 0 14px"></div>
+    <button type="button" class="hero-solde-btn" id="lite-solde-btn" aria-expanded="false" onclick="toggleSoldeDetail()">
+      <span class="hero-label" style="display:block">Solde permanent ›</span>
+      <span class="hero-solde" id="lite-solde" style="display:block">0 F</span>
+      <span id="lite-global-sub" style="display:block;font-size:12px;color:var(--hero-sub);margin:-10px 0 4px"></span>
+    </button>
+    <button type="button" class="hero-fix" onclick="startCheckpoint()">✏️ Corriger mon solde</button>
     <div class="hero-tiles">
       <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="gain" aria-expanded="false" onclick="toggleMetric('lite-hero', 'gain')"><span id="lite-year-gain-label">Entrées de l'année</span> ›<b class="hero-gain">+<span id="lite-gain"> 0</span></b></button>
       <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="depense" aria-expanded="false" onclick="toggleMetric('lite-hero', 'depense')"><span id="lite-year-dep-label">Dépenses de l'année</span> ›<b class="hero-dep">−<span id="lite-dep"> 0</span></b></button>
@@ -655,6 +664,7 @@ details[open] summary::after{transform:rotate(-135deg)}
     </div>
   </div>
 
+  <div id="lite-solde-detail"></div>
   <div id="lite-hero-detail"></div>
 
   <div class="card">
@@ -1147,7 +1157,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v18';
+var APP_VERSION = 'v19';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Alcool':'#A23B5A','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1453,7 +1463,7 @@ function load(){
     return storageGet('budget_notes');
   }).then(function(r){
     if(r && r.value){ try { notes = sanitizeNotes(JSON.parse(r.value)); } catch(e){} }
-    soldeConnu = soldePermanent();
+    soldeConnu = soldeActuel();
     setStorageStatus(true);
   });
 }
@@ -2592,6 +2602,7 @@ function pushCheckpoint(cp){
   cp.mark = Math.max(now, maxId + 1);   // toute entree creee ensuite aura un id >= mark
   checkpoints.push(cp);
   if(checkpoints.length > MAX_CHECKPOINTS) checkpoints = checkpoints.slice(-MAX_CHECKPOINTS);
+  soldeConnu = soldeActuel();   // recaler le solde n'est pas une depense : pas de question « d'ou vient l'argent »
   return saveCheckpoints().then(renderAll);
 }
 /* prefill : montant deja tape, repropose quand l'utilisateur choisit « Corriger ». */
@@ -3075,20 +3086,23 @@ function renderLite(){
   /* La carte sombre a ses propres jetons, plus clairs que GAIN_COL / DEP_COL. */
   var HG = cssVar('--hero-gain', '#5FD3A6'), HD = cssVar('--hero-dep', '#FF9A6B');
   function signe(n){ return (n >= 0 ? '+' : '') + fmt(n); }
-  /* Le chiffre principal est le solde PERMANENT : toutes les entrees moins toutes
-     les sorties depuis la premiere saisie. Il peut etre negatif : c'est alors le
-     signe qu'il manque une entree d'argent (cf. checkNegatif). */
-  var sol = soldePermanent();
+  /* Le chiffre principal suit l'argent reel (cf. soldeActuel). Il peut etre
+     negatif : c'est alors le signe qu'il manque une entree d'argent (checkNegatif). */
+  var sol = soldeActuel();
   var sEl = document.getElementById('lite-solde');
   sEl.textContent = signe(sol);
   sEl.className = 'hero-solde' + (sol < 0 ? ' neg' : '');
   var gSub = document.getElementById('lite-global-sub');
-  var est = estimatedBalance(), cp = lastCheckpoint();
-  if(est !== null){
+  var cp = lastCheckpoint();
+  if(cp){
     var age = daysBetween(cp.date, t);
-    gSub.textContent = 'Argent réel estimé : ' + fmt(est) + ' · pointé ' + (age === 0 ? 'aujourd\'hui' : 'il y a ' + age + ' j');
+    gSub.textContent = 'Depuis ton pointage ' + (age === 0 ? 'd\'aujourd\'hui' : 'd\'il y a ' + age + ' j') + (age >= 7 ? ' : vérifie-le' : '') + ' · touche pour le détail';
     gSub.style.color = age >= 7 ? cssVar('--hero-warn', '#F2B866') : '';   // au-dela d'une semaine, l'estimation derive
-  } else { gSub.textContent = ''; }
+  } else {
+    gSub.textContent = 'Jamais pointé : part de 0 F à ta 1re saisie · touche pour le détail';
+    gSub.style.color = cssVar('--hero-warn', '#F2B866');
+  }
+  renderSoldeDetail();
   /* Juste dessous : les entrees et sorties de l'annee en cours. */
   var y = t.slice(0, 4), yArr = getEntries({ year: y });
   document.getElementById('lite-year-gain-label').textContent = 'Entrées ' + y;
@@ -3303,11 +3317,12 @@ function renderRecurrents(){
    reste negatif, un bandeau le rappelle sur l'Accueil. */
 var soldeConnu = null;
 function checkNegatif(){
-  var s = soldePermanent(), avant = soldeConnu;
+  var s = soldeActuel(), avant = soldeConnu;
   soldeConnu = s;
   if(avant !== null && avant >= 0 && s < 0) setTimeout(justifierNegatif, 350);
 }
 var JUSTIF = [
+  ['corriger', 'Le solde est faux : je corrige avec mon argent réel', null],
   ['initial', 'Argent que j\'avais déjà avant de commencer l\'app', 'Solde initial'],
   ['emprunt', 'Emprunt ou prêt reçu', 'Emprunt & aide'],
   ['aide', 'Don ou aide reçu', 'Emprunt & aide'],
@@ -3315,7 +3330,7 @@ var JUSTIF = [
   ['autre', 'Autre', 'Autre']
 ];
 function justifierNegatif(){
-  var s = soldePermanent();
+  var s = soldeActuel();
   if(s >= 0) return;
   var m = document.getElementById('app-modal');
   if(m && m.style.display === 'flex') return;    // une autre question est deja ouverte
@@ -3328,10 +3343,11 @@ function justifierNegatif(){
     'Enregistrer', 'Plus tard').then(function(ok){
       if(!ok) return;
       var type = document.getElementById('justif-type').value;
+      if(type === 'corriger') return startCheckpoint();
       var precision = document.getElementById('justif-desc').value.trim();
       var amount = parseInt(document.getElementById('justif-amount').value, 10);
       if(isNaN(amount) || amount <= 0){ uiAlert('Montant invalide.'); return; }
-      var j = JUSTIF.filter(function(x){ return x[0] === type; })[0] || JUSTIF[4];
+      var j = JUSTIF.filter(function(x){ return x[0] === type; })[0] || JUSTIF[JUSTIF.length - 1];
       var cat = j[2] || autoCat(precision || 'salaire', 'gain');
       entries.push({ id: nextId(), date: today(), type: 'gain', cat: cat, amount: amount,
                      desc: precision || j[1] });
@@ -3342,7 +3358,7 @@ function justifierNegatif(){
 function renderNegBanner(){
   var b = document.getElementById('lite-neg-banner');
   if(!b) return;
-  var s = soldePermanent();
+  var s = soldeActuel();
   b.style.display = s < 0 ? 'flex' : 'none';
   if(s < 0) document.getElementById('lite-neg-text').textContent = 'Solde négatif (' + fmt(s) + ') : d\'où vient l\'argent ?';
 }
@@ -3413,6 +3429,81 @@ function renderNotes(){
   }).join('') : '<div class="empty">' + (q ? 'Aucune note ne contient « ' + esc(q) + ' ».' : 'Aucune note pour l\'instant.') + '</div>';
 }
 
+/* Le solde affiche : l'argent REEL des qu'un pointage existe (pointage + ce qui a
+   ete saisi depuis), sinon le cumul depuis la premiere saisie. Le cumul seul
+   gonfle de chaque depense oubliee et ignore l'argent d'avant l'app : affiche en
+   grand, il donnait +855 740 F a quelqu'un qui avait ~665 000 F. */
+function soldeActuel(){
+  var est = estimatedBalance();
+  return est !== null ? est : soldePermanent();
+}
+/* De quoi est fait ce solde : point de depart, puis mouvements par mois. Sert a
+   retrouver le mois ou une saisie manque ou est fausse. */
+function soldeDetail(){
+  var cp = lastCheckpoint(), t = today();
+  var compte = cp
+    ? entries.filter(function(e){ return e.id >= cp.mark && e.date >= cp.date && e.date <= t; })
+    : entries.slice();
+  var mois = {};
+  compte.forEach(function(e){
+    var m = e.date.slice(0, 7);
+    var x = mois[m] || (mois[m] = { mois: m, g: 0, d: 0 });
+    if(e.type === 'gain') x.g += e.amount; else x.d += e.amount;
+  });
+  var premiere = entries.reduce(function(m, e){ return (!m || e.date < m) ? e.date : m; }, null);
+  return {
+    depart: cp ? cp.real : 0,
+    departDate: cp ? cp.date : premiere,
+    pointe: !!cp,
+    g: sumType(compte, 'gain'), d: sumType(compte, 'depense'),
+    mois: Object.keys(mois).sort().map(function(k){ return mois[k]; }),
+    cumul: soldePermanent()
+  };
+}
+var soldeDetailOuvert = false;
+function toggleSoldeDetail(){
+  soldeDetailOuvert = !soldeDetailOuvert;
+  renderSoldeDetail();
+}
+function renderSoldeDetail(){
+  var box = document.getElementById('lite-solde-detail');
+  if(!box) return;
+  var btn = document.getElementById('lite-solde-btn');
+  if(btn) btn.setAttribute('aria-expanded', soldeDetailOuvert ? 'true' : 'false');
+  if(!soldeDetailOuvert){ box.className = ''; box.innerHTML = ''; return; }
+  var x = soldeDetail(), fin = x.depart + x.g - x.d, cumulMois = x.depart;
+  function ligne(lab, val, cls, gras){
+    return '<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line-soft)' + (gras ? ';font-weight:700' : '') + '">' +
+      '<span>' + lab + '</span><span class="' + (cls || '') + '">' + val + '</span></div>';
+  }
+  box.className = 'card metric-detail';
+  box.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' +
+      '<div class="section-title" style="margin:0">D\'où vient ce solde</div>' +
+      '<button type="button" class="btn btn-sm" style="width:36px;padding:0" aria-label="Fermer" onclick="toggleSoldeDetail()">✕</button></div>' +
+    '<div style="font-size:14px">' +
+      ligne(x.pointe ? 'Ton pointage du ' + fmtDateFR(x.departDate) : 'Départ à ta 1re saisie' + (x.departDate ? ' (' + fmtDateFR(x.departDate) + ')' : ''), fmt(x.depart)) +
+      ligne('+ entrées saisies depuis', '+' + fmt(x.g), 'gain-color') +
+      ligne('− dépenses saisies depuis', '−' + fmt(x.d), 'dep-color') +
+      ligne('= solde affiché', (fin >= 0 ? '+' : '') + fmt(fin), fin >= 0 ? 'gain-color' : 'dep-color', true) +
+    '</div>' +
+    (x.mois.length ? '<div style="font-size:13px;font-weight:650;margin:14px 0 4px">Mois par mois</div>' +
+      '<div style="font-size:13px">' + x.mois.map(function(m){
+        cumulMois += m.g - m.d;
+        var net = m.g - m.d;
+        return '<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;gap:6px;padding:6px 0;border-top:1px solid var(--line-soft)">' +
+          '<span>' + ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'][parseInt(m.mois.slice(5), 10) - 1] + ' ' + m.mois.slice(2, 4) + '</span>' +
+          '<span class="gain-color" style="text-align:right">+' + fmtShort(m.g) + '</span>' +
+          '<span class="dep-color" style="text-align:right">−' + fmtShort(m.d) + '</span>' +
+          '<span style="text-align:right;font-weight:650">' + fmtShort(cumulMois) + '</span></div>';
+      }).join('') + '<div style="font-size:11px;color:var(--text-3);margin-top:4px">Colonnes : entrées · dépenses · solde à la fin du mois. ' +
+      'Touche « Entrées » ou « Dépenses » plus haut pour voir les lignes d\'une année.</div></div>' : '') +
+    '<div style="font-size:13px;color:var(--text-3);line-height:1.5;margin:14px 0 10px">' +
+      (x.pointe ? '' : 'Sans pointage, ce solde part de 0 F et ne connaît ni l\'argent que tu avais avant l\'app, ni les dépenses non saisies. ') +
+      'S\'il ne correspond pas à ce que tu as vraiment (liquide + Wave + Orange Money + banque), corrige-le : l\'app repartira de ce montant.</div>' +
+    '<button type="button" class="btn btn-primary" style="width:100%" onclick="startCheckpoint()">Corriger mon solde</button>' +
+    (x.pointe ? '<div style="font-size:11px;color:var(--text-3);margin-top:8px">Pour info, le cumul brut de toutes tes saisies depuis le début est de ' + fmt(x.cumul) + '.</div>' : '');
+}
 function soldePermanent(){
   return sumType(entries, 'gain') - sumType(entries, 'depense');
 }
@@ -4141,7 +4232,7 @@ function importJSON(ev){
           RC.forEach(function(x){ if(!recurrents.some(function(y){ return y.id === x.id; })) recurrents.push(x); });
           NT.forEach(function(x){ if(!notes.some(function(y){ return y.id === x.id; })) notes.push(x); });
         }
-        soldeConnu = soldePermanent();   // une restauration n'est pas une depense : pas de question
+        soldeConnu = soldeActuel();   // une restauration n'est pas une depense : pas de question
         return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats(), saveRecurrents(), saveNotes()]).then(function(){
           updateCats();
           msg.style.color = GAIN_COL;
