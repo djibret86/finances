@@ -93,7 +93,7 @@ body{
 /* ---------- Barre de navigation du bas ------------------- */
 .bottom-nav{
   position:fixed;left:0;right:0;bottom:0;z-index:50;
-  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px;
   padding:6px max(8px,calc((100% - 600px) / 2)) calc(6px + env(safe-area-inset-bottom));
   background:var(--surface);border-top:1px solid var(--line);
 }
@@ -180,7 +180,7 @@ body{
 
 /* ---------- Saisie rapide -------------------------------- */
 .hero-row{display:flex;gap:8px}
-.hero-row input{flex:1;min-width:0}
+.hero-row input,.hero-row textarea{flex:1;min-width:0}
 .add-btn{
   flex:0 0 auto;width:48px;min-height:46px;
   display:inline-flex;align-items:center;justify-content:center;
@@ -199,6 +199,9 @@ body{
   display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;
   font-family:inherit;font-size:13px;color:var(--text);text-align:left;cursor:pointer;
 }
+
+/* ---------- Notes ---------------------------------------- */
+.note-item{padding:12px 14px;border:1px solid var(--line-soft);border-radius:14px;background:var(--surface-3)}
 
 /* ---------- Choix d'icone et de couleur ------------------ */
 .pick-row{display:flex;flex-wrap:wrap;gap:6px}
@@ -639,33 +642,34 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 
   <div class="card hero">
-    <div class="hero-label">Solde du jour</div>
+    <div class="hero-label">Solde permanent <span style="opacity:.8">· toutes tes entrées moins toutes tes sorties</span></div>
     <div class="hero-solde" id="lite-solde">0 F</div>
+    <div id="lite-global-sub" style="font-size:12px;color:var(--hero-sub);margin:-10px 0 14px"></div>
     <div class="hero-tiles">
-      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="gain" aria-expanded="false" onclick="toggleMetric('lite-hero', 'gain')">Entrées ›<b class="hero-gain">+<span id="lite-gain"> 0</span></b></button>
-      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="depense" aria-expanded="false" onclick="toggleMetric('lite-hero', 'depense')">Dépenses ›<b class="hero-dep">−<span id="lite-dep"> 0</span></b></button>
+      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="gain" aria-expanded="false" onclick="toggleMetric('lite-hero', 'gain')"><span id="lite-year-gain-label">Entrées de l'année</span> ›<b class="hero-gain">+<span id="lite-gain"> 0</span></b></button>
+      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="depense" aria-expanded="false" onclick="toggleMetric('lite-hero', 'depense')"><span id="lite-year-dep-label">Dépenses de l'année</span> ›<b class="hero-dep">−<span id="lite-dep"> 0</span></b></button>
     </div>
     <div class="hero-foot">
-      <span id="lite-month-label">Ce mois-ci<br><b id="lite-month"></b></span>
-      <span style="text-align:right"><span id="lite-global-label">Solde global cumulé</span><br><b id="lite-global"></b>
-        <br><span id="lite-global-sub" style="font-size:11px"></span></span>
+      <span>Solde du jour<br><b id="lite-day"></b></span>
+      <span style="text-align:right" id="lite-month-label">Ce mois-ci<br><b id="lite-month"></b></span>
     </div>
   </div>
 
   <div id="lite-hero-detail"></div>
 
   <div class="card">
-    <label for="hero-input" style="margin:0 0 10px;font-size:15px;font-weight:650;letter-spacing:0;text-transform:none;color:var(--text)">Nouvelle entrée</label>
-    <div class="hero-row">
-      <input type="text" id="hero-input" placeholder="ex: Taxi -2000  ou  Salaire +580000" autocomplete="off">
-      <button type="button" class="add-btn" onclick="saveHero('hero-input', 'hero-msg', 'hero-preview')" aria-label="Ajouter l'entrée">
+    <label for="quick-input" style="margin:0 0 10px;font-size:15px;font-weight:650;letter-spacing:0;text-transform:none;color:var(--text)">Nouvelles entrées <span style="font-weight:500;color:var(--text-3)">· une par ligne</span></label>
+    <div class="hero-row" style="align-items:flex-start">
+      <textarea id="quick-input" rows="3" placeholder="Taxi -2000&#10;Bière -650 hier&#10;Salaire +580000" style="font-family:inherit;font-size:16px;line-height:1.5"></textarea>
+      <button type="button" class="add-btn" onclick="saveQuick()" aria-label="Enregistrer les entrées">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
     </div>
+    <div id="quick-detail" style="margin-top:8px"></div>
+    <div id="quick-preview" style="font-size:12px;color:var(--text-3);margin-top:4px"></div>
     <div id="shortcuts-lite" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
-    <div id="hero-preview" style="font-size:12px;color:var(--text-3);margin-top:8px;min-height:16px"></div>
-    <div id="hero-msg" style="font-size:13px;margin-top:2px;min-height:18px"></div>
-    <div style="font-size:12px;color:var(--text-3)">Date passée : ajoute-la à la fin, <code>hier</code>, <code>lundi</code>, <code>12/08</code></div>
+    <div id="hero-msg" style="font-size:13px;margin-top:8px;min-height:18px"></div>
+    <div style="font-size:12px;color:var(--text-3)">Écris une entrée par ligne, puis appuie sur <b>+</b>. Date passée : ajoute-la à la fin, <code>hier</code>, <code>lundi</code>, <code>12/08</code></div>
     <button type="button" class="link-btn" onclick="setMode('pro');proTab('saisie')">Saisie avancée →</button>
   </div>
 
@@ -674,6 +678,10 @@ details[open] summary::after{transform:rotate(-135deg)}
     <div style="font-size:22px;font-weight:600" id="lite-daily-budget"></div>
     <div style="font-size:11px;color:var(--text-3);margin-top:4px" id="lite-daily-detail"></div>
   </div>
+
+  <button type="button" class="card banner-btn alert-danger" id="lite-neg-banner" style="display:none" onclick="justifierNegatif()">
+    <span id="lite-neg-text"></span><span>Justifier →</span>
+  </button>
 
   <button type="button" class="card banner-btn" id="lite-reclass-banner" style="display:none" onclick="openReclass()">
     <span id="lite-reclass-text"></span><span style="color:var(--text-3)">→</span>
@@ -691,10 +699,6 @@ details[open] summary::after{transform:rotate(-135deg)}
     <div class="entry-list" id="lite-list"></div>
   </div>
 
-  <div class="card">
-    <div class="section-title" id="lite-donut-title">Dépenses du mois</div>
-    <div style="position:relative;height:220px"><canvas id="lite-donut"></canvas></div>
-  </div>
 </div>
 
 <div id="mode-pro" style="display:none">
@@ -720,21 +724,6 @@ details[open] summary::after{transform:rotate(-135deg)}
       </div>
       <div id="date-flag" class="alert alert-warn" style="display:none;margin-top:8px"></div>
       <div id="hero-msg-pro" style="font-size:13px;margin-top:8px;min-height:18px"></div>
-    </div>
-
-    <div class="card">
-      <details>
-        <summary style="font-size:13px;font-weight:500;cursor:pointer">Saisie multi-lignes</summary>
-        <div style="margin-top:10px">
-          <textarea id="quick-input" rows="4" placeholder="Bière -3000&#10;Lavage auto -2000"></textarea>
-          <div id="quick-detail" style="margin-top:8px"></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-            <span id="quick-preview" style="font-size:12px;color:var(--text-3)"></span>
-            <button class="btn btn-primary btn-sm" onclick="saveQuick()">Tout enregistrer</button>
-          </div>
-          <div id="quick-msg" style="font-size:13px;margin-top:6px"></div>
-        </div>
-      </details>
     </div>
 
     <div class="card">
@@ -801,6 +790,14 @@ details[open] summary::after{transform:rotate(-135deg)}
   <div class="pro-section" id="pro-previsions">
     <h1 class="page-title">Prévu</h1>
     <div class="card">
+      <div class="section-title">Opérations récurrentes</div>
+      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
+        Salaire, loyer, jardinier, abonnements… Chaque mois, l'app prépare leur ligne ci-dessous.
+        <b>Rien n'est enregistré sans ta validation (✓)</b>, où tu peux corriger le montant.
+      </div>
+      <div class="entry-list" id="rec-list" style="max-height:none"></div>
+    </div>
+    <div class="card">
       <div class="section-title">Dépenses / gains prévus</div>
       <label>Date de départ</label>
       <input type="date" id="planned-start-date" style="margin-bottom:8px">
@@ -860,8 +857,12 @@ details[open] summary::after{transform:rotate(-135deg)}
       <button class="btn btn-sm" id="month-bilan-btn" onclick="showBilan(currentMonthKey())" style="width:100%;margin-top:12px;display:none">📊 Bilan de ce mois</button>
     </div>
     <div class="card">
-      <div class="section-title">Où va l'argent</div>
+      <div class="section-title">Où va l'argent (dépenses)</div>
       <div style="position:relative;height:220px"><canvas id="month-donut"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-title">D'où vient l'argent (entrées)</div>
+      <div style="position:relative;height:220px"><canvas id="month-donut-gain"></canvas></div>
     </div>
     <div class="card">
       <div class="section-title">Gains / Dépenses par jour</div>
@@ -921,6 +922,26 @@ details[open] summary::after{transform:rotate(-135deg)}
         <button class="btn btn-primary btn-sm" onclick="addBudget()">Ajouter</button>
       </div>
       <div style="font-size:12px;color:var(--text-3);margin-top:8px">Pour retirer un budget, mets son plafond à 0.</div>
+    </div>
+  </div>
+
+  <div class="pro-section" id="pro-notes">
+    <h1 class="page-title">Notes</h1>
+    <div class="card">
+      <label for="note-input" style="margin-top:0">Nouvelle note</label>
+      <textarea id="note-input" rows="4" placeholder="Idée, rappel, dette à rembourser, achat prévu…" style="font-family:inherit;font-size:16px;line-height:1.5"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button class="btn btn-sm" id="note-cancel" style="display:none" onclick="cancelNote()">Annuler</button>
+        <button class="btn btn-primary btn-sm" id="note-submit" onclick="submitNote()">Ajouter</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+        <div class="section-title" style="margin:0">Mes notes</div>
+        <span id="note-count" style="font-size:12px;color:var(--text-3)"></span>
+      </div>
+      <input type="text" id="note-search" oninput="renderNotes()" placeholder="Rechercher dans les notes…" style="margin-bottom:10px">
+      <div id="note-list" style="display:flex;flex-direction:column;gap:10px"></div>
     </div>
   </div>
 
@@ -1085,6 +1106,9 @@ details[open] summary::after{transform:rotate(-135deg)}
   <button type="button" class="nav-btn" data-nav="budgets" onclick="goNav('budgets')">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/></svg>Budgets
   </button>
+  <button type="button" class="nav-btn" data-nav="notes" onclick="goNav('notes')">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h7"/></svg>Notes
+  </button>
   <button type="button" class="nav-btn" data-nav="plus" onclick="goNav('plus')">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>Plus
   </button>
@@ -1111,7 +1135,7 @@ details[open] summary::after{transform:rotate(-135deg)}
 "use strict";
 
 var CATS = {
-  gain: ['Salaire','Vente','Remboursement','Bonus','Investissement','Autre'],
+  gain: ['Salaire','Vente','Remboursement','Bonus','Investissement','Emprunt & aide','Solde initial','Autre'],
   depense: ['Achat','Alimentation','Alcool','Transport','Logement','Santé','Éducation','Famille & fêtes','Soins & services','Communication','Loisirs','Fournitures','Matières premières','Prêts/Emprunts','Impôts','Extra','Autre']
 };
 var MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -1123,14 +1147,15 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v17';
+var APP_VERSION = 'v18';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Alcool':'#A23B5A','Transport':'#4A6FA5','Logement':'#8E6CB8',
   'Santé':'#D14D72','Communication':'#3BA3A3','Loisirs':'#E5A341','Fournitures':'#7A9E5F',
   'Matières premières':'#5C8A3A','Prêts/Emprunts':'#B85C38','Impôts':'#8A6D5C','Autre':'#999',
   'Éducation':'#3E7CB1','Famille & fêtes':'#B5568F','Soins & services':'#6D8299','Extra':'#9C3D54',
-  'Salaire':'#1D9E75','Vente':'#26C293','Remboursement':'#5FB98E','Bonus':'#3BA378','Investissement':'#2E8B6A'
+  'Salaire':'#1D9E75','Vente':'#26C293','Remboursement':'#5FB98E','Bonus':'#3BA378','Investissement':'#2E8B6A',
+  'Emprunt & aide':'#6C8EAD','Solde initial':'#4F7F7A'
 };
 /* Icones des categories dans les listes : traits SVG plutot qu'emojis, dont le
    rendu change d'un telephone a l'autre. CAT_ICONS (emojis) reste pour le texte. */
@@ -1153,6 +1178,8 @@ var CAT_SVG = {
   'Soins & services':'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.2 8.2L20 18M8.2 15.8L20 6"/>',
   'Extra':'<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
   'Salaire':'<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M8 8V5h8v3M3 13h18"/>',
+  'Emprunt & aide':'<path d="M2 12l4-4 4 3 4-3 4 3 4-3M6 16l3 3 3-3 3 3 3-3"/>',
+  'Solde initial':'<path d="M3 21h18M5 21V10M19 21V10M9 21V10M15 21V10M2 10l10-6 10 6z"/>',
   'Vente':'<path d="M5 8h14l-1 13H6zM9 8V6a3 3 0 0 1 6 0v2"/>',
   'Remboursement':'<path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/>',
   'Bonus':'<path d="M3 9h18v4H3zM5 13v8h14v-8M12 9v12M12 9C10 5 6 5 6 8s6 1 6 1 6 2 6-1-4-3-6 1"/>',
@@ -1197,7 +1224,7 @@ var CAT_ICONS = {
   'Achat':'🧾','Alimentation':'🍽️','Alcool':'🍺','Transport':'🚗','Logement':'🏠','Santé':'⚕️',
   'Communication':'📱','Loisirs':'🎮','Fournitures':'📦','Matières premières':'🌾',
   'Prêts/Emprunts':'💳','Impôts':'🏛️','Autre':'📌','Éducation':'🎓','Famille & fêtes':'🎉','Soins & services':'✂️','Extra':'⚡',
-  'Salaire':'💼','Vente':'🛒','Remboursement':'↩️','Bonus':'🎁','Investissement':'📈'
+  'Salaire':'💼','Vente':'🛒','Remboursement':'↩️','Bonus':'🎁','Investissement':'📈','Emprunt & aide':'🤝','Solde initial':'🏦'
 };
 
 var AUTO_CAT = {
@@ -1417,10 +1444,22 @@ function load(){
   }).then(function(r){
     if(r && r.value){ try { customCats = sanitizeCustomCats(JSON.parse(r.value)); } catch(e){} }
     applyCustomCats();
+    return storageGet('budget_recurrents');
+  }).then(function(r){
+    if(r && r.value){ try { recurrents = sanitizeRecurrents(JSON.parse(r.value)); } catch(e){} }
+    return storageGet('budget_rec_ignored');
+  }).then(function(r){
+    if(r && r.value){ try { recIgnored = JSON.parse(r.value) || {}; } catch(e){} }
+    return storageGet('budget_notes');
+  }).then(function(r){
+    if(r && r.value){ try { notes = sanitizeNotes(JSON.parse(r.value)); } catch(e){} }
+    soldeConnu = soldePermanent();
     setStorageStatus(true);
   });
 }
-function save(){ return storageSet('budget_entries', JSON.stringify(entries)); }
+function save(){
+  return storageSet('budget_entries', JSON.stringify(entries)).then(function(r){ checkNegatif(); return r; });
+}
 function saveBudgets(){ return storageSet('budget_targets', JSON.stringify(budgets)); }
 function saveMode(){ return storageSet('budget_mode', mode); }
 function saveShortcuts(){ return storageSet('budget_shortcuts', JSON.stringify(shortcuts)); }
@@ -2688,9 +2727,11 @@ function saveHero(inpId, msgId, prevId){
 }
 function saveQuick(){
   checkDayChange();
+  /* La saisie multiligne vit sur l'Accueil depuis la v18 : une ligne = une entree,
+     datee du jour sauf si elle porte sa propre date. */
   var lines = document.getElementById('quick-input').value.split('\n');
-  var msg = document.getElementById('quick-msg');
-  var base = document.getElementById('f-date').value || today();
+  var msg = document.getElementById('hero-msg');
+  var base = today();
   var parsed = [], fail = 0;
   lines.forEach(function(l){
     if(!l.trim()) return;
@@ -2832,8 +2873,8 @@ function renderPlanned(){
     return '<div class="planned-item ' + (isDue ? 'due-today' : '') + '" id="planned-' + p.id + '" style="border-left-color:' + (CAT_COLORS[p.cat] || '#999') + '">' +
       '<div class="planned-meta">' +
         '<span class="badge ' + (p.type === 'gain' ? 'badge-gain' : 'badge-dep') + '">' + (p.type === 'gain' ? 'GAIN' : 'DÉP') + '</span>' +
-        '<span style="font-size:13px">' + (CAT_ICONS[p.cat] || '') + ' ' + esc(p.cat) + (p.desc ? ' · ' + esc(p.desc) : '') + '</span>' +
-        '<div class="planned-date">Prévu ' + fmtDateRel(p.date) + (isDue ? ' — échu' : '') + '</div>' +
+        '<span style="font-size:13px">' + (p.rec ? '🔁 ' : '') + (CAT_ICONS[p.cat] || '') + ' ' + esc(p.cat) + (p.desc ? ' · ' + esc(p.desc) : '') + '</span>' +
+        '<div class="planned-date">Prévu ' + fmtDateRel(p.date) + (isDue ? ' — échu, à valider ✓' : '') + '</div>' +
       '</div>' +
       '<span class="entry-amount ' + (p.type === 'gain' ? 'gain-color' : 'dep-color') + '">' + (p.type === 'gain' ? '+' : '-') + fmtShort(p.amount) + '</span>' +
       '<div class="planned-actions">' +
@@ -3031,57 +3072,45 @@ function renderLite(){
   renderBilanCard();
   document.getElementById('lite-date').textContent = new Date(t + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   var arr = getEntries({ date: t });
-  var g = sumType(arr, 'gain'), d = sumType(arr, 'depense'), sol = g - d;
-  var sEl = document.getElementById('lite-solde');
-  sEl.textContent = (sol >= 0 ? '+' : '') + fmt(sol);
-  sEl.className = 'hero-solde' + (sol < 0 ? ' neg' : '');
-  /* La carte du solde est sombre dans les deux themes : ses couleurs ont leurs
-     propres jetons, plus clairs que GAIN_COL / DEP_COL. */
+  /* La carte sombre a ses propres jetons, plus clairs que GAIN_COL / DEP_COL. */
   var HG = cssVar('--hero-gain', '#5FD3A6'), HD = cssVar('--hero-dep', '#FF9A6B');
-  document.getElementById('lite-gain').textContent = ' ' + fmt(g);
-  document.getElementById('lite-dep').textContent = ' ' + fmt(d);
-  /* Cumul du mois : l'horizon d'un budget, absent entre le solde du jour et
-     le cumul depuis toujours. */
-  var mArr = getEntries({ month: t.slice(0,7) });
-  var ms = sumType(mArr, 'gain') - sumType(mArr, 'depense');
-  var mEl = document.getElementById('lite-month');
-  mEl.textContent = (ms >= 0 ? '+' : '') + fmt(ms);
-  mEl.style.color = ms >= 0 ? HG : HD;
-  document.getElementById('lite-month-label').firstChild.textContent =
-    MONTHS[new Date(t + 'T12:00').getMonth()];
-
-  /* Une fois pointe, on montre l'argent reel estime plutot qu'un cumul parti de 0
-     au jour de l'installation. */
-  var gEl = document.getElementById('lite-global');
-  var gLab = document.getElementById('lite-global-label');
+  function signe(n){ return (n >= 0 ? '+' : '') + fmt(n); }
+  /* Le chiffre principal est le solde PERMANENT : toutes les entrees moins toutes
+     les sorties depuis la premiere saisie. Il peut etre negatif : c'est alors le
+     signe qu'il manque une entree d'argent (cf. checkNegatif). */
+  var sol = soldePermanent();
+  var sEl = document.getElementById('lite-solde');
+  sEl.textContent = signe(sol);
+  sEl.className = 'hero-solde' + (sol < 0 ? ' neg' : '');
   var gSub = document.getElementById('lite-global-sub');
   var est = estimatedBalance(), cp = lastCheckpoint();
   if(est !== null){
-    gLab.textContent = 'Solde réel estimé';
-    gEl.textContent = fmt(est);
-    gEl.style.color = est >= 0 ? cssVar('--hero-text', '#FFFFFF') : HD;
     var age = daysBetween(cp.date, t);
-    gSub.textContent = age === 0 ? 'pointé aujourd\'hui' : 'pointé il y a ' + age + ' j';
+    gSub.textContent = 'Argent réel estimé : ' + fmt(est) + ' · pointé ' + (age === 0 ? 'aujourd\'hui' : 'il y a ' + age + ' j');
     gSub.style.color = age >= 7 ? cssVar('--hero-warn', '#F2B866') : '';   // au-dela d'une semaine, l'estimation derive
-  } else {
-    var gs = sumType(entries, 'gain') - sumType(entries, 'depense');
-    gLab.textContent = 'Solde global cumulé';
-    gEl.textContent = (gs >= 0 ? '+' : '') + fmt(gs);
-    gEl.style.color = gs >= 0 ? HG : HD;
-    gSub.textContent = 'depuis la 1re saisie';
-    gSub.style.color = '';
-  }
+  } else { gSub.textContent = ''; }
+  /* Juste dessous : les entrees et sorties de l'annee en cours. */
+  var y = t.slice(0, 4), yArr = getEntries({ year: y });
+  document.getElementById('lite-year-gain-label').textContent = 'Entrées ' + y;
+  document.getElementById('lite-year-dep-label').textContent = 'Dépenses ' + y;
+  document.getElementById('lite-gain').textContent = ' ' + fmt(sumType(yArr, 'gain'));
+  document.getElementById('lite-dep').textContent = ' ' + fmt(sumType(yArr, 'depense'));
+  var ds = sumType(arr, 'gain') - sumType(arr, 'depense');
+  var dEl = document.getElementById('lite-day');
+  dEl.textContent = signe(ds);
+  dEl.style.color = ds >= 0 ? HG : HD;
+  var mArr = getEntries({ month: t.slice(0,7) });
+  var ms = sumType(mArr, 'gain') - sumType(mArr, 'depense');
+  var mEl = document.getElementById('lite-month');
+  mEl.textContent = signe(ms);
+  mEl.style.color = ms >= 0 ? HG : HD;
+  document.getElementById('lite-month-label').firstChild.textContent =
+    MONTHS[new Date(t + 'T12:00').getMonth()];
   renderEntryList('lite-list', arr);
-  METRIC_FILTER['lite-hero'] = { date: t };
+  METRIC_FILTER['lite-hero'] = { year: y };
   renderMetricDetail('lite-hero');
   renderLiteBudgetWidget();
   renderReclassBanner();
-  var monthDeps = catBreakdown(getEntries({ month: t.slice(0,7) }), 'depense');
-  var monthTotal = monthDeps.reduce(function(s, x){ return s + x[1]; }, 0);
-  var now = new Date();
-  document.getElementById('lite-donut-title').textContent =
-    'Dépenses de ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear() + (monthTotal ? ' — ' + fmt(monthTotal) : '');
-  renderDonut('lite-donut', 'liteDonut', monthDeps);
   var b = document.getElementById('lite-planned-banner');
   if(planned.length){
     var dueN = planned.filter(function(p){ return p.date <= t; }).length;
@@ -3090,6 +3119,302 @@ function renderLite(){
       ? '⚠️ ' + dueN + ' prévision(s) échue(s) à valider (' + planned.length + ' au total)'
       : '📋 ' + planned.length + ' prévision(s) en attente';
   } else { b.style.display = 'none'; }
+}
+/* ---------- operations recurrentes ----------
+   Salaire, loyer, jardinier, abonnements (Prime Video, Claude, Office…) reviennent
+   chaque mois : les retaper est une corvee, les oublier fausse le solde. L'app les
+   reconnait (meme mot dans au moins 2 mois, ou mot typique d'un paiement mensuel)
+   et les PROPOSE ; une fois confirmees, elle prepare chaque mois une ligne dans
+   « Prevu ». Rien n'entre dans les entrees sans validation (✓) : le montant reel
+   peut y etre corrige (un abonnement augmente, une prime s'ajoute).
+   `gen` retient les mois deja prepares : supprimer une prevision generee ne la
+   fait pas reapparaitre au rendu suivant. */
+var recurrents = [];     // [{ id, type, cat, desc, word, amount, day, gen: ['2026-11'] }]
+var recIgnored = {};     // « type|mot » -> 1 : suggestion refusee
+var REC_MOTS = ['salaire','paie','loyer','jardin','jardinier','jardinage','abonnement','netflix','prime video',
+  'amazon prime','claude','chatgpt','office','microsoft','canal','dstv','internet','fibre','wifi','forfait',
+  'électricité','electricite','sodeci','cie ','gardien','vigile','nounou','ménagère','menagere','scolarité',
+  'scolarite','tontine','assurance','spotify','youtube','icloud','google one','apple','cotisation','mensualité','mensualite'];
+function saveRecurrents(){
+  return Promise.all([storageSet('budget_recurrents', JSON.stringify(recurrents)),
+                      storageSet('budget_rec_ignored', JSON.stringify(recIgnored))]);
+}
+function sanitizeRecurrents(list){
+  if(!Array.isArray(list)) return [];
+  return list.filter(function(r){
+    return r && (r.type === 'gain' || r.type === 'depense') && typeof r.cat === 'string' && typeof r.word === 'string'
+      && typeof r.amount === 'number' && r.amount > 0 && r.day >= 1 && r.day <= 31;
+  }).map(function(r){
+    return { id: typeof r.id === 'number' ? r.id : nextId(), type: r.type, cat: r.cat, desc: String(r.desc || ''),
+      word: r.word, amount: Math.round(r.amount), day: Math.round(r.day),
+      gen: Array.isArray(r.gen) ? r.gen.filter(function(m){ return /^\d{4}-\d{2}$/.test(m); }) : [] };
+  });
+}
+/* Le mot qui identifie une recurrente. « abonnement » ou « facture » sont trop
+   generiques : « Abonnement Claude » et « Abonnement Netflix » se confondraient.
+   On les retire d'abord, et on ne les garde que s'il ne reste rien d'autre. */
+var REC_GENERIQUES = /(^|\s)(abonnements?|mensualit[ée]s?|cotisations?|factures?|paiements?|frais)(?=\s|$)/gi;
+function recKey(e){
+  var d = String(e.desc || '');
+  var w = motSignificatif(d.replace(REC_GENERIQUES, ' ')) || motSignificatif(d);
+  return e.type + '|' + (w || String(e.cat).toLowerCase());
+}
+function estMotRecurrent(desc){
+  var d = String(desc || '').toLowerCase();
+  return REC_MOTS.some(function(m){ return matchesKeyword(d, m); });
+}
+/* Suggestions : groupes « type|mot » vus dans au moins 2 mois sur les 6 derniers,
+   ou portant un mot typique d'un paiement mensuel. Le dernier montant et le
+   dernier quantieme servent de proposition. */
+function suggestRecurrents(){
+  var debut = addMonths(today().slice(0, 7) + '-01', -5);
+  var groupes = {};
+  entries.forEach(function(e){
+    if(e.date < debut || e.desc === 'Écart de pointage') return;
+    var k = recKey(e);
+    var g = groupes[k] || (groupes[k] = { key: k, mois: {}, n: 0, last: null, typique: false });
+    g.mois[e.date.slice(0, 7)] = 1;
+    g.n++;
+    if(!g.last || e.date > g.last.date) g.last = e;
+    if(estMotRecurrent(e.desc)) g.typique = true;
+  });
+  var deja = {};
+  recurrents.forEach(function(r){ deja[r.type + '|' + r.word] = 1; });
+  return Object.keys(groupes).map(function(k){ return groupes[k]; }).filter(function(g){
+    var nbMois = Object.keys(g.mois).length;
+    return !deja[g.key] && !recIgnored[g.key] && (nbMois >= 2 || g.typique);
+  }).sort(function(a, b){
+    return (b.typique ? 1 : 0) - (a.typique ? 1 : 0) || Object.keys(b.mois).length - Object.keys(a.mois).length;
+  }).slice(0, 12).map(function(g){
+    var e = g.last;
+    return { key: g.key, type: e.type, cat: e.cat, desc: e.desc || e.cat, word: g.key.slice(g.key.indexOf('|') + 1),
+      amount: e.amount, day: parseInt(e.date.slice(8, 10), 10), nbMois: Object.keys(g.mois).length };
+  });
+}
+var REC_SUG = [];
+function acceptRecurrent(i){
+  var s = REC_SUG[i];
+  if(!s) return;
+  recurrents.push({ id: nextId(), type: s.type, cat: s.cat, desc: s.desc, word: s.word, amount: s.amount, day: s.day, gen: [] });
+  ensureRecurrentPlanned();
+  Promise.all([saveRecurrents(), savePlanned()]).then(renderAll);
+}
+function ignoreRecurrent(i){
+  var s = REC_SUG[i];
+  if(!s) return;
+  recIgnored[s.key] = 1;
+  saveRecurrents().then(renderAll);
+}
+function dateDuMois(mois, jour){
+  var dernier = new Date(parseInt(mois.slice(0, 4), 10), parseInt(mois.slice(5, 7), 10), 0).getDate();
+  return mois + '-' + String(Math.min(jour, dernier)).padStart(2, '0');
+}
+/* Prepare le mois en cours et le suivant. Le mois en cours est saute si l'operation
+   y est deja saisie (regle creee apres coup). Renvoie le nombre de lignes creees. */
+function ensureRecurrentPlanned(){
+  var t = today(), cur = t.slice(0, 7), next = addMonths(cur + '-01', 1).slice(0, 7);
+  var n = 0;
+  recurrents.forEach(function(r){
+    [cur, next].forEach(function(m){
+      if(r.gen.indexOf(m) !== -1) return;
+      r.gen.push(m);
+      var dejaSaisie = m === cur && entries.some(function(e){
+        return e.date.slice(0, 7) === m && e.type === r.type && recKey(e) === r.type + '|' + r.word;
+      });
+      if(dejaSaisie) return;
+      planned.push({ id: nextId(), date: dateDuMois(m, r.day), type: r.type, cat: r.cat, amount: r.amount,
+                     desc: r.desc, rec: r.id });
+      n++;
+    });
+    if(r.gen.length > 24) r.gen = r.gen.slice(-24);
+  });
+  if(n) planned.sort(function(a, b){ return a.date.localeCompare(b.date); });
+  return n;
+}
+function editRecurrent(id){
+  var r = recurrents.filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  uiPrompt('<b>' + esc(r.desc) + '</b><br>Montant habituel :', r.amount, true).then(function(raw){
+    if(raw === null) return;
+    var a = parseInt(String(raw).replace(/[^\d]/g, ''), 10);
+    if(isNaN(a) || a <= 0){ uiAlert('Montant invalide.'); return; }
+    return uiPrompt('Jour du mois (1 à 31) :', r.day, true).then(function(rawJ){
+      if(rawJ === null) return;
+      var j = parseInt(rawJ, 10);
+      if(isNaN(j) || j < 1 || j > 31){ uiAlert('Jour invalide.'); return; }
+      r.amount = a; r.day = j;
+      /* Les lignes deja preparees et pas encore validees suivent le changement. */
+      planned.forEach(function(p){
+        if(p.rec === r.id && p.date >= today()){ p.amount = a; p.date = dateDuMois(p.date.slice(0, 7), j); }
+      });
+      planned.sort(function(x, y){ return x.date.localeCompare(y.date); });
+      return Promise.all([saveRecurrents(), savePlanned()]).then(renderAll);
+    });
+  });
+}
+function stopRecurrent(id){
+  var r = recurrents.filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  var attente = planned.filter(function(p){ return p.rec === id; }).length;
+  uiConfirm('Ne plus préparer <b>' + esc(r.desc) + '</b> chaque mois ?' +
+    (attente ? '\n<span style="font-size:12px;color:var(--text-3)">Ses ' + attente + ' prévision(s) en attente seront retirées. Les entrées déjà validées restent.</span>' : ''), 'Arrêter')
+    .then(function(ok){
+      if(!ok) return;
+      recurrents = recurrents.filter(function(x){ return x.id !== id; });
+      recIgnored[r.type + '|' + r.word] = 1;     // ne pas le resuggerer aussitot
+      planned = planned.filter(function(p){ return p.rec !== id; });
+      return Promise.all([saveRecurrents(), savePlanned()]).then(renderAll);
+    });
+}
+function renderRecurrents(){
+  var box = document.getElementById('rec-list');
+  if(!box) return;
+  REC_SUG = suggestRecurrents();
+  var html = '';
+  if(REC_SUG.length){
+    html += '<div style="font-size:13px;font-weight:650;margin:2px 0 6px">Détectées dans tes entrées</div>' +
+      REC_SUG.map(function(s, i){
+        return '<div class="entry-item">' + catIcon(s.cat) +
+          '<div class="entry-meta"><div class="entry-title" style="white-space:normal">' + esc(s.desc) + '</div>' +
+          '<div class="entry-cat" style="white-space:normal">' + (s.type === 'gain' ? '+' : '−') + fmt(s.amount) + ' · le ' + s.day + ' du mois · ' +
+            (s.nbMois >= 2 ? 'vue ' + s.nbMois + ' mois' : 'paiement mensuel probable') + '</div></div></div>' +
+          '<div style="display:flex;gap:8px;margin:0 0 10px 50px">' +
+            '<button class="btn btn-primary btn-sm" onclick="acceptRecurrent(' + i + ')">🔁 Chaque mois</button>' +
+            '<button class="btn btn-sm" onclick="ignoreRecurrent(' + i + ')">Pas récurrent</button></div>';
+      }).join('');
+  }
+  html += '<div style="font-size:13px;font-weight:650;margin:12px 0 6px">Préparées chaque mois</div>';
+  html += recurrents.length ? recurrents.map(function(r){
+    return '<div class="entry-item">' + catIcon(r.cat) +
+      '<div class="entry-meta"><div class="entry-title">🔁 ' + esc(r.desc) + '</div>' +
+      '<div class="entry-cat" style="white-space:normal">' + esc(r.cat) + ' · le ' + r.day + ' du mois</div></div>' +
+      '<span class="entry-amount ' + (r.type === 'gain' ? 'gain-color' : 'dep-color') + '">' + (r.type === 'gain' ? '+' : '−') + fmtShort(r.amount) + '</span>' +
+      '<button class="btn btn-sm" onclick="editRecurrent(' + r.id + ')" aria-label="Modifier">✎</button>' +
+      '<button class="btn btn-danger btn-sm" onclick="stopRecurrent(' + r.id + ')" aria-label="Arrêter">✕</button></div>';
+  }).join('') : '<div class="empty" style="padding:14px">Aucune pour l\'instant. Confirme une suggestion ci-dessus.</div>';
+  box.innerHTML = html;
+}
+
+/* ---------- solde negatif : d'ou vient l'argent ? ----------
+   Un solde permanent sous zero veut dire qu'on a depense de l'argent que l'app
+   n'a jamais vu entrer : emprunt, aide, argent deja en poche avant la premiere
+   saisie, vente oubliee. Au moment ou il passe sous zero, on demande d'ou il
+   vient ; la reponse devient une entree, le solde redevient juste. Tant qu'il
+   reste negatif, un bandeau le rappelle sur l'Accueil. */
+var soldeConnu = null;
+function checkNegatif(){
+  var s = soldePermanent(), avant = soldeConnu;
+  soldeConnu = s;
+  if(avant !== null && avant >= 0 && s < 0) setTimeout(justifierNegatif, 350);
+}
+var JUSTIF = [
+  ['initial', 'Argent que j\'avais déjà avant de commencer l\'app', 'Solde initial'],
+  ['emprunt', 'Emprunt ou prêt reçu', 'Emprunt & aide'],
+  ['aide', 'Don ou aide reçu', 'Emprunt & aide'],
+  ['oubli', 'Salaire ou vente oubliés', null],
+  ['autre', 'Autre', 'Autre']
+];
+function justifierNegatif(){
+  var s = soldePermanent();
+  if(s >= 0) return;
+  var m = document.getElementById('app-modal');
+  if(m && m.style.display === 'flex') return;    // une autre question est deja ouverte
+  uiConfirm('<b>Ton solde passe à ' + fmt(s) + '.</b> ' +
+    'Tu as dépensé plus que ce qui est entré dans l\'app : d\'où vient l\'argent ?' +
+    '<label for="justif-type">Origine</label><select id="justif-type">' +
+      JUSTIF.map(function(j){ return '<option value="' + j[0] + '">' + j[1] + '</option>'; }).join('') + '</select>' +
+    '<label for="justif-desc">Précision (facultatif)</label><input type="text" id="justif-desc" placeholder="ex. prêt de Koffi, épargne…">' +
+    '<label for="justif-amount">Montant</label><input type="number" id="justif-amount" inputmode="numeric" min="1" value="' + Math.round(-s) + '">',
+    'Enregistrer', 'Plus tard').then(function(ok){
+      if(!ok) return;
+      var type = document.getElementById('justif-type').value;
+      var precision = document.getElementById('justif-desc').value.trim();
+      var amount = parseInt(document.getElementById('justif-amount').value, 10);
+      if(isNaN(amount) || amount <= 0){ uiAlert('Montant invalide.'); return; }
+      var j = JUSTIF.filter(function(x){ return x[0] === type; })[0] || JUSTIF[4];
+      var cat = j[2] || autoCat(precision || 'salaire', 'gain');
+      entries.push({ id: nextId(), date: today(), type: 'gain', cat: cat, amount: amount,
+                     desc: precision || j[1] });
+      sortEntries();
+      return save().then(renderAll);
+    });
+}
+function renderNegBanner(){
+  var b = document.getElementById('lite-neg-banner');
+  if(!b) return;
+  var s = soldePermanent();
+  b.style.display = s < 0 ? 'flex' : 'none';
+  if(s < 0) document.getElementById('lite-neg-text').textContent = 'Solde négatif (' + fmt(s) + ') : d\'où vient l\'argent ?';
+}
+
+/* ---------- notes ---------- */
+var notes = [];          // [{ id, date, text }]
+var editingNote = null;
+function saveNotes(){ return storageSet('budget_notes', JSON.stringify(notes)); }
+function sanitizeNotes(list){
+  if(!Array.isArray(list)) return [];
+  return list.filter(function(n){ return n && typeof n.text === 'string' && n.text.trim() && /^\d{4}-\d{2}-\d{2}$/.test(n.date); })
+    .map(function(n){ return { id: typeof n.id === 'number' ? n.id : nextId(), date: n.date, text: n.text.slice(0, 5000) }; });
+}
+function submitNote(){
+  var inp = document.getElementById('note-input');
+  var txt = inp.value.trim();
+  if(!txt) return;
+  if(editingNote !== null){
+    var n = notes.filter(function(x){ return x.id === editingNote; })[0];
+    if(n) n.text = txt;
+  } else {
+    notes.push({ id: nextId(), date: today(), text: txt });
+  }
+  cancelNote();
+  saveNotes().then(renderNotes);
+}
+function editNote(id){
+  var n = notes.filter(function(x){ return x.id === id; })[0];
+  if(!n) return;
+  editingNote = id;
+  var inp = document.getElementById('note-input');
+  inp.value = n.text;
+  document.getElementById('note-submit').textContent = 'Enregistrer';
+  document.getElementById('note-cancel').style.display = '';
+  inp.focus();
+  inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function cancelNote(){
+  editingNote = null;
+  document.getElementById('note-input').value = '';
+  document.getElementById('note-submit').textContent = 'Ajouter';
+  document.getElementById('note-cancel').style.display = 'none';
+}
+function deleteNote(id){
+  uiConfirm('Supprimer cette note ?', 'Supprimer').then(function(ok){
+    if(!ok) return;
+    notes = notes.filter(function(x){ return x.id !== id; });
+    if(editingNote === id) cancelNote();
+    saveNotes().then(renderNotes);
+  });
+}
+function renderNotes(){
+  var box = document.getElementById('note-list');
+  if(!box) return;
+  var q = (document.getElementById('note-search').value || '').trim().toLowerCase();
+  var liste = notes.slice().sort(function(a, b){ return b.date.localeCompare(a.date) || b.id - a.id; })
+    .filter(function(n){ return !q || n.text.toLowerCase().indexOf(q) !== -1; });
+  document.getElementById('note-count').textContent = notes.length ? notes.length + ' note(s)' : '';
+  box.innerHTML = liste.length ? liste.map(function(n){
+    return '<div class="note-item">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">' +
+        '<span style="font-size:12px;color:var(--text-3)">' + fmtDateRel(n.date) + '</span>' +
+        '<span style="display:flex;gap:6px">' +
+          '<button class="btn btn-sm" style="width:36px;padding:0" onclick="editNote(' + n.id + ')" aria-label="Modifier">✎</button>' +
+          '<button class="btn btn-danger btn-sm" style="width:36px;padding:0" onclick="deleteNote(' + n.id + ')" aria-label="Supprimer">✕</button>' +
+        '</span></div>' +
+      '<div style="white-space:pre-wrap;font-size:14px;line-height:1.5">' + esc(n.text) + '</div></div>';
+  }).join('') : '<div class="empty">' + (q ? 'Aucune note ne contient « ' + esc(q) + ' ».' : 'Aucune note pour l\'instant.') + '</div>';
+}
+
+function soldePermanent(){
+  return sumType(entries, 'gain') - sumType(entries, 'depense');
 }
 function renderLiteBudgetWidget(){
   var w = document.getElementById('lite-budget-widget');
@@ -3373,6 +3698,7 @@ function renderMonth(){
   renderCatBars('month-cats-gain', catBreakdown(arr, 'gain'), GAIN_COL, { month: pre }, 'gain');
   renderCatBars('month-cats-dep', catBreakdown(arr, 'depense'), DEP_COL, { month: pre }, 'depense');
   renderDonut('month-donut', 'monthDonut', catBreakdown(arr, 'depense'));
+  renderDonut('month-donut-gain', 'monthDonutGain', catBreakdown(arr, 'gain'));
   renderMonthChart(arr, y, m);
   renderBalanceChart(arr, y, m);
   /* Le bilan n'a de sens que pour un mois termine. */
@@ -3608,7 +3934,7 @@ function exportCSV(){
 }
 function backupBlob(){
   var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned,
-            learnedCats: learnedCats, checkpoints: checkpoints, customCats: customCats, exported_at: new Date().toISOString() };
+            learnedCats: learnedCats, checkpoints: checkpoints, customCats: customCats, recurrents: recurrents, recIgnored: recIgnored, notes: notes, exported_at: new Date().toISOString() };
   return new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
 }
 function backupName(){ return 'finances_backup_' + today() + '.json'; }
@@ -3809,7 +4135,14 @@ function importJSON(ev){
         sortEntries();
         planned.sort(function(a, b){ return a.date.localeCompare(b.date); });
         syncIdCounter();
-        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats()]).then(function(){
+        var RC = sanitizeRecurrents(d.recurrents), NT = sanitizeNotes(d.notes);
+        if(rep){ recurrents = RC; notes = NT; recIgnored = (d.recIgnored && typeof d.recIgnored === 'object') ? d.recIgnored : {}; }
+        else {
+          RC.forEach(function(x){ if(!recurrents.some(function(y){ return y.id === x.id; })) recurrents.push(x); });
+          NT.forEach(function(x){ if(!notes.some(function(y){ return y.id === x.id; })) notes.push(x); });
+        }
+        soldeConnu = soldePermanent();   // une restauration n'est pas une depense : pas de question
+        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats(), saveRecurrents(), saveNotes()]).then(function(){
           updateCats();
           msg.style.color = GAIN_COL;
           msg.textContent = '✓ Restauré — ' + entries.length + ' entrée(s), ' + planned.length + ' prévision(s).';
@@ -3967,7 +4300,7 @@ function proTab(id){
 }
 /* Barre du bas : 5 entrees pour les 7 sections. Accueil = ecran Lite (et la
    saisie avancee qui en part), Bilan = Jour / Mois / Annee. */
-var NAV_TABS = { prevu: 'previsions', budgets: 'budgets', plus: 'export' };
+var NAV_TABS = { prevu: 'previsions', budgets: 'budgets', notes: 'notes', plus: 'export' };
 var BILAN_TABS = ['jour', 'mois', 'annee'];
 function navKey(){
   if(mode === 'lite' || currentProTab === 'saisie') return 'accueil';
@@ -3998,7 +4331,8 @@ function goNav(k){
 function renderCurrentProTab(){
   var id = currentProTab;
   if(id === 'saisie') renderToday();
-  else if(id === 'previsions') renderPlanned();
+  else if(id === 'previsions'){ renderRecurrents(); renderPlanned(); }
+  else if(id === 'notes') renderNotes();
   else if(id === 'jour') renderDay();
   else if(id === 'mois') renderMonth();
   else if(id === 'annee') renderYear();
@@ -4049,6 +4383,9 @@ function renderAll(){
      getComputedStyle de plus. */
   readTheme();
   updateNav();
+  /* Les recurrentes confirmees preparent leur ligne du mois des qu'elle manque. */
+  if(ensureRecurrentPlanned()) Promise.all([savePlanned(), saveRecurrents()]);
+  renderNegBanner();
   var ver = document.getElementById('app-version');
   if(ver) ver.textContent = 'Version ' + APP_VERSION;
   renderBackupReminder();
@@ -4087,7 +4424,7 @@ function setupHero(iId, mId, pId){
 }
 
 document.getElementById('quick-input').addEventListener('input', function(){
-  var base = (document.getElementById('f-date') || {}).value || today();
+  var base = today();
   var diag = this.value.split('\n').map(function(l){ return diagnoseLine(l, base); }).filter(Boolean);
   var okd = diag.filter(function(x){ return x.ok; });
   var g = okd.filter(function(x){ return x.p.type === 'gain'; }).reduce(function(s, x){ return s + x.p.amount; }, 0);
@@ -4159,7 +4496,6 @@ function initUI(){
   });
   updateCats();
   updateDateFlag();
-  setupHero('hero-input', 'hero-msg', 'hero-preview');
   setupHero('hero-input-pro', 'hero-msg-pro', 'hero-preview-pro');
   var sb = document.getElementById('btn-share-backup');
   if(sb && canShareBackup()) sb.style.display = '';

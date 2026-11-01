@@ -118,6 +118,49 @@ try {
     ok('Suppression : entrée passée en Autre', entries.filter(e => e.id === 9)[0].cat, 'Autre');
     ok('Suppression : budget et règle oubliés', [budgets['Bébé'], learnedCats['depense|pampers']], [undefined, undefined]);
     ok('Suppression : retirée des listes', CATS.depense.indexOf('Bébé'), -1);
+
+    // --- Solde permanent ---
+    entries = [
+      { id: 1, date: '2026-01-10', type: 'gain', cat: 'Salaire', amount: 100000, desc: 'Salaire' },
+      { id: 2, date: '2026-10-20', type: 'depense', cat: 'Logement', amount: 150000, desc: 'Loyer' }
+    ];
+    ok('Solde permanent négatif possible', soldePermanent(), -50000);
+
+    // --- Opérations récurrentes ---
+    planned = []; recurrents = []; recIgnored = {};
+    entries = [
+      { id: 11, date: '2026-08-25', type: 'gain', cat: 'Salaire', amount: 580000, desc: 'Salaire' },
+      { id: 12, date: '2026-09-25', type: 'gain', cat: 'Salaire', amount: 580000, desc: 'Salaire' },
+      { id: 13, date: '2026-10-05', type: 'depense', cat: 'Loisirs', amount: 3500, desc: 'Prime Video' },
+      { id: 14, date: '2026-10-12', type: 'depense', cat: 'Alimentation', amount: 2000, desc: 'Pain' },
+      { id: 15, date: '2026-10-02', type: 'depense', cat: 'Logement', amount: 15000, desc: 'Jardinier' }
+    ];
+    const sug = suggestRecurrents();
+    const sugNoms = sug.map(x => x.desc).sort();
+    ok('Récurrentes détectées (2 mois ou mot typique)', sugNoms, ['Jardinier', 'Prime Video', 'Salaire']);
+    ok('Achat ponctuel non proposé', sugNoms.indexOf('Pain'), -1);
+    const sal = sug.filter(x => x.desc === 'Salaire')[0];
+    ok('Montant et jour proposés', [sal.amount, sal.day, sal.nbMois], [580000, 25, 2]);
+    REC_SUG = sug;
+    recurrents.push({ id: 900, type: 'gain', cat: 'Salaire', desc: 'Salaire', word: 'salaire', amount: 580000, day: 25, gen: [] });
+    recurrents.push({ id: 901, type: 'depense', cat: 'Loisirs', desc: 'Prime Video', word: 'prime', amount: 3500, day: 5, gen: [] });
+    ok('Préparation : salaire d\'octobre et de novembre, Prime Video seulement en novembre (déjà payé en octobre)',
+      ensureRecurrentPlanned(), 3);
+    ok('Dates préparées', planned.map(p => p.desc + ' ' + p.date).sort(),
+      ['Prime Video 2026-11-05', 'Salaire 2026-10-25', 'Salaire 2026-11-25']);
+    ok('Rien n\'est enregistré sans validation', entries.length, 5);
+    ok('Pas de doublon au rendu suivant', ensureRecurrentPlanned(), 0);
+    planned = planned.filter(p => p.desc !== 'Salaire' || p.date !== '2026-10-25');
+    ok('Prévision supprimée : pas recréée', ensureRecurrentPlanned(), 0);
+    ok('31 du mois en novembre → 30', dateDuMois('2026-11', 31), '2026-11-30');
+    ok('Suggestion déjà acceptée : plus proposée', suggestRecurrents().map(x => x.desc).sort(), ['Jardinier']);
+
+    ok('Abonnements distincts (Claude ≠ Netflix)',
+      [recKey({ type: 'depense', desc: 'Abonnement Claude' }), recKey({ type: 'depense', desc: 'Abonnement Netflix' })],
+      ['depense|claude', 'depense|netflix']);
+
+    // --- Notes ---
+    ok('Notes valides seulement', sanitizeNotes([{ id: 1, date: '2026-10-20', text: 'Rembourser Koffi' }, { date: 'x', text: 'a' }, { id: 3, date: '2026-10-21', text: '  ' }]).length, 1);
     return r;
   });
   for (const [nom, obtenu, attendu] of cas) {
