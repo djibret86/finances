@@ -206,6 +206,14 @@ body{
   font-family:inherit;font-size:13px;color:var(--text);text-align:left;cursor:pointer;
 }
 
+/* ---------- Operations (releve) -------------------------- */
+.ops-month{
+  font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);
+  padding:14px 2px 4px;
+}
+.ops-month:first-child{padding-top:0}
+#lite-ops .entry-item + .ops-month{border-top:none}
+
 /* ---------- Notes ---------------------------------------- */
 .note-item{padding:12px 14px;border:1px solid var(--line-soft);border-radius:14px;background:var(--surface-3)}
 
@@ -655,11 +663,11 @@ details[open] summary::after{transform:rotate(-135deg)}
     </button>
     <button type="button" class="hero-fix" onclick="startCheckpoint()">✏️ Corriger mon solde</button>
     <div class="hero-tiles">
-      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="gain" aria-expanded="false" onclick="toggleMetric('lite-hero', 'gain')"><span id="lite-year-gain-label">Entrées de l'année</span> ›<b class="hero-gain">+<span id="lite-gain"> 0</span></b></button>
-      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="depense" aria-expanded="false" onclick="toggleMetric('lite-hero', 'depense')"><span id="lite-year-dep-label">Dépenses de l'année</span> ›<b class="hero-dep">−<span id="lite-dep"> 0</span></b></button>
+      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="gain" aria-expanded="false" onclick="toggleMetric('lite-hero', 'gain')">Total entrées ›<b class="hero-gain">+<span id="lite-gain"> 0</span></b></button>
+      <button type="button" class="hero-tile" data-metric="lite-hero" data-kind="depense" aria-expanded="false" onclick="toggleMetric('lite-hero', 'depense')">Total dépenses ›<b class="hero-dep">−<span id="lite-dep"> 0</span></b></button>
     </div>
     <div class="hero-foot">
-      <span>Solde du jour<br><b id="lite-day"></b></span>
+      <span id="lite-depart-label">Départ<br><b id="lite-depart"></b></span>
       <span style="text-align:right" id="lite-month-label">Ce mois-ci<br><b id="lite-month"></b></span>
     </div>
   </div>
@@ -705,8 +713,8 @@ details[open] summary::after{transform:rotate(-135deg)}
   </div>
 
   <div class="card">
-    <div class="section-title">Aujourd'hui</div>
-    <div class="entry-list" id="lite-list"></div>
+    <div class="section-title">Mes opérations</div>
+    <div class="entry-list" id="lite-ops" style="max-height:none"></div>
   </div>
 
 </div>
@@ -2177,6 +2185,9 @@ function getEntries(f){
     if(f.year && e.date.indexOf(String(f.year)) !== 0) return false;
     if(f.type && e.type !== f.type) return false;
     if(f.cat && e.cat !== f.cat) return false;
+    if(f.minId && e.id < f.minId) return false;     // saisies creees apres un pointage
+    if(f.from && e.date < f.from) return false;
+    if(f.to && e.date > f.to) return false;
     return true;
   });
 }
@@ -2271,17 +2282,42 @@ function renderEntryList(id, arr){
   var el = document.getElementById(id);
   if(!el) return;
   if(!arr.length){ el.innerHTML = '<div class="empty">Aucune entrée</div>'; return; }
-  el.innerHTML = arr.map(function(e){
-    return '<div class="entry-item" id="entry-' + e.id + '">' + catIcon(e.cat) +
-      '<div class="entry-meta">' +
-        '<div class="entry-title">' + esc(e.desc || e.cat) + '</div>' +
-        '<div class="entry-cat">' + (e.desc ? esc(e.cat) + ' · ' : '') + fmtDateRel(e.date) + '</div>' +
-      '</div>' +
-      '<span class="entry-amount ' + (e.type === 'gain' ? 'gain-color' : 'dep-color') + '" title="' + fmt(e.amount) + '">' + (e.type === 'gain' ? '+' : '-') + fmtShort(e.amount) + '</span>' +
-      '<button class="btn btn-sm" onclick="openEdit(' + e.id + ')">✎</button>' +
-      '<button class="btn btn-danger btn-sm" onclick="confirmDelete(' + e.id + ')">✕</button>' +
-    '</div>';
-  }).join('');
+  el.innerHTML = arr.map(entryRowHTML).join('');
+}
+function entryRowHTML(e){
+  return '<div class="entry-item" id="entry-' + e.id + '">' + catIcon(e.cat) +
+    '<div class="entry-meta">' +
+      '<div class="entry-title">' + esc(e.desc || e.cat) + '</div>' +
+      '<div class="entry-cat">' + (e.desc ? esc(e.cat) + ' · ' : '') + fmtDateRel(e.date) + '</div>' +
+    '</div>' +
+    /* Montant exact, comme sur un releve bancaire : « 20k » ne permet pas de
+       pointer ligne a ligne avec la banque. */
+    '<span class="entry-amount ' + (e.type === 'gain' ? 'gain-color' : 'dep-color') + '" title="' + fmt(e.amount) + '">' + (e.type === 'gain' ? '+' : '−') + Math.round(e.amount).toLocaleString('fr-FR') + '</span>' +
+    '<button class="btn btn-sm" onclick="openEdit(' + e.id + ')">✎</button>' +
+    '<button class="btn btn-danger btn-sm" onclick="confirmDelete(' + e.id + ')">✕</button>' +
+  '</div>';
+}
+/* Toutes les operations, la plus recente d'abord, regroupees par mois comme sur
+   un releve bancaire. On en montre OPS_PAS a la fois pour garder l'ecran fluide. */
+var OPS_PAS = 40, opsMax = OPS_PAS;
+function renderOperations(){
+  var el = document.getElementById('lite-ops');
+  if(!el) return;
+  if(!entries.length){ el.innerHTML = '<div class="empty">Aucune opération pour l\'instant.</div>'; return; }
+  var html = '', moisCourant = null;
+  entries.slice(0, opsMax).forEach(function(e){
+    var m = e.date.slice(0, 7);
+    if(m !== moisCourant){
+      moisCourant = m;
+      html += '<div class="ops-month">' + MONTHS[parseInt(m.slice(5), 10) - 1] + ' ' + m.slice(0, 4) + '</div>';
+    }
+    html += entryRowHTML(e);
+  });
+  if(entries.length > opsMax){
+    html += '<button type="button" class="btn btn-sm" style="width:100%;margin-top:10px" onclick="opsMax += OPS_PAS; renderOperations()">' +
+      'Voir les opérations plus anciennes (' + (entries.length - opsMax) + ')</button>';
+  }
+  el.innerHTML = html;
 }
 /* ---------- detail par categorie (repartition) ----------
    Chaque ligne devient un tiroir : on y voit les entrees qui composent le
@@ -3103,16 +3139,17 @@ function renderLite(){
     gSub.style.color = cssVar('--hero-warn', '#F2B866');
   }
   renderSoldeDetail();
-  /* Juste dessous : les entrees et sorties de l'annee en cours. */
-  var y = t.slice(0, 4), yArr = getEntries({ year: y });
-  document.getElementById('lite-year-gain-label').textContent = 'Entrées ' + y;
-  document.getElementById('lite-year-dep-label').textContent = 'Dépenses ' + y;
-  document.getElementById('lite-gain').textContent = ' ' + fmt(sumType(yArr, 'gain'));
-  document.getElementById('lite-dep').textContent = ' ' + fmt(sumType(yArr, 'depense'));
-  var ds = sumType(arr, 'gain') - sumType(arr, 'depense');
-  var dEl = document.getElementById('lite-day');
-  dEl.textContent = signe(ds);
-  dEl.style.color = ds >= 0 ? HG : HD;
+  /* Juste dessous, comme sur un releve bancaire : le total des entrees et des
+     depenses qui font ce solde, en temps reel. Depart + entrees - depenses = solde :
+     les trois chiffres se verifient a la main (cf. soldeDetail). */
+  var x = soldeDetail();
+  var departFiltre = cp ? { minId: cp.mark, from: cp.date, to: t } : {};
+  document.getElementById('lite-gain').textContent = ' ' + fmt(x.g);
+  document.getElementById('lite-dep').textContent = ' ' + fmt(x.d);
+  document.getElementById('lite-depart-label').firstChild.textContent = cp ? 'Pointé le ' + fmtDateFR(cp.date) : 'Départ';
+  var dpEl = document.getElementById('lite-depart');
+  dpEl.textContent = fmt(x.depart);
+  dpEl.style.color = '';
   var mArr = getEntries({ month: t.slice(0,7) });
   var ms = sumType(mArr, 'gain') - sumType(mArr, 'depense');
   var mEl = document.getElementById('lite-month');
@@ -3120,8 +3157,8 @@ function renderLite(){
   mEl.style.color = ms >= 0 ? HG : HD;
   document.getElementById('lite-month-label').firstChild.textContent =
     MONTHS[new Date(t + 'T12:00').getMonth()];
-  renderEntryList('lite-list', arr);
-  METRIC_FILTER['lite-hero'] = { year: y };
+  renderOperations();
+  METRIC_FILTER['lite-hero'] = departFiltre;
   renderMetricDetail('lite-hero');
   renderLiteBudgetWidget();
   renderReclassBanner();

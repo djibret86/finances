@@ -134,6 +134,8 @@ try {
     const det = soldeDetail();
     ok('Détail : départ, entrées, dépenses', [det.depart, det.g, det.d, det.pointe], [665000, 0, 5000, true]);
     ok('Détail : mois par mois', det.mois, [{ mois: '2026-10', g: 0, d: 5000 }]);
+    ok('Départ + entrées − dépenses = solde affiché', det.depart + det.g - det.d, soldeActuel());
+    ok('Filtre « depuis le pointage »', getEntries({ minId: 100, from: '2026-10-15', to: '2026-10-20', type: 'depense' }).map(e => e.id), [101]);
     checkpoints = [];
 
     // --- Opérations récurrentes ---
