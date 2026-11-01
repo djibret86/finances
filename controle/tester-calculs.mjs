@@ -171,6 +171,20 @@ try {
       [recKey({ type: 'depense', desc: 'Abonnement Claude' }), recKey({ type: 'depense', desc: 'Abonnement Netflix' })],
       ['depense|claude', 'depense|netflix']);
 
+    // --- Comparaison avec un relevé ---
+    entries = [
+      { id: 1, date: '2026-10-29', type: 'depense', cat: 'Alimentation', amount: 4300, desc: 'Maquis' },
+      { id: 2, date: '2026-10-31', type: 'depense', cat: 'Alimentation', amount: 6500, desc: 'Courses' }
+    ];
+    /* Années écrites en entier : l'horloge du test est au 20/10, un « 28/10 » seul
+       serait lu comme le 28/10 de l'an passé (jamais de date future). */
+    const rel = compareReleve('Maquis Sandy -4300 28/10/2026\nMaquis Sandy -4300 28/10/2026\nCarrefour -6500 20/10/2026\n' +
+      'De Doudou +16000 31/10/2026\nDépôt +20000 27/10/2026\nTransfert vers carte prépayée -6000 31/10/2026\nBonjour');
+    ok('Relevé : saisi à 1 jour près, une entrée ne sert qu\'une fois, trop loin = manquant',
+      rel.map(r => r.etat), ['saisi', 'manquant', 'manquant', 'manquant', 'interne', 'interne', 'illisible']);
+    ok('Relevé : seules les manquantes sont cochées', rel.map(r => r.coche), [false, true, true, true, false, false, false]);
+    ok('Relevé : le sens vient du signe', rel[3].p.type, 'gain');
+
     // --- Notes ---
     ok('Notes valides seulement', sanitizeNotes([{ id: 1, date: '2026-10-20', text: 'Rembourser Koffi' }, { date: 'x', text: 'a' }, { id: 3, date: '2026-10-21', text: '  ' }]).length, 1);
     return r;

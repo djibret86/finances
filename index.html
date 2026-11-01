@@ -214,6 +214,10 @@ body{
 .ops-month:first-child{padding-top:0}
 #lite-ops .entry-item + .ops-month{border-top:none}
 
+/* ---------- Comparaison avec un releve ------------------- */
+.releve-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid var(--line-soft);font-size:14px;
+  text-transform:none;letter-spacing:0;color:var(--text);margin:0;font-weight:400}
+
 /* ---------- Notes ---------------------------------------- */
 .note-item{padding:12px 14px;border:1px solid var(--line-soft);border-radius:14px;background:var(--surface-3)}
 
@@ -970,6 +974,19 @@ details[open] summary::after{transform:rotate(-135deg)}
          et disparait definitivement une fois la revision close. -->
     <!-- Reclassement : regroupe les entrees « Autre » (et l'alcool encore range en
          Alimentation) par mot, pour les classer d'un geste. Invisible s'il n'y a rien. -->
+    <div class="card" id="releve-card">
+      <div class="section-title">Comparer avec un relevé</div>
+      <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
+        Colle les opérations de ta banque ou de Wave, une par ligne, avec la date à la fin.
+        <b>Mets + devant les entrées d'argent.</b> L'app repère ce qui est déjà saisi et te propose le reste.
+      </div>
+      <textarea id="releve-input" rows="5" placeholder="Maquis Sandy -4300 28/10&#10;De Doudou +16000 31/10&#10;Dépôt +20000 27/10" style="font-family:inherit;font-size:15px;line-height:1.5"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button class="btn btn-primary btn-sm" onclick="runReleve()">Comparer</button>
+      </div>
+      <div id="releve-result" style="margin-top:10px"></div>
+    </div>
+
     <div class="card">
       <div class="section-title">Mes catégories</div>
       <div class="entry-list" id="custom-cat-list" style="max-height:none;margin-bottom:12px"></div>
@@ -1165,7 +1182,7 @@ var THEME = { warn:'#B8741A', text:'#0C1017', text3:'#6b6b70', surface:'#fff', c
 var MAX_SANE_AMOUNT = 5000000;
 /* A bumper en meme temps que CACHE dans sw.js — c'est le seul moyen de
    distinguer « le correctif ne marche pas » de « le telephone sert du cache ». */
-var APP_VERSION = 'v19';
+var APP_VERSION = 'v20';
 
 var CAT_COLORS = {
   'Achat':'#C1553F','Alimentation':'#E8794F','Alcool':'#A23B5A','Transport':'#4A6FA5','Logement':'#8E6CB8',
@@ -1284,7 +1301,7 @@ var AUTO_CAT = {
     ['Alcool',['bière','biere','beer','vin','whisky','rhum','alcool','vodka','champagne','pastis','cognac',
       'apéro','apero','pinte','bangui','koutoukou','tchapalo','flag','castel','guinness','heineken',
       '33 export','beaufort','tuborg','desperados','kronenbourg','hennessy','martini','baileys','jack daniel']],
-    ['Alimentation',['vinaigre','resto','restaurant','repas','nourriture','manger','déjeuner','diner','dîner','brunch','café','cafe','pain','marché','marche','super','supermarché','supermarche','boutique','shop','courses','food','snack','maquis','drink','boisson','eau','jus','oeuf','œuf','oeufs','lait','riz','attiéké','attieke','poulet','poisson','viande','légume','legume','fruit','tomate','oignon','banane','plantain','sucre','sel','huile','farine','yaourt','fromage','beurre','chocolat','biscuit','gâteau','gateau','bonbon',
+    ['Alimentation',['vinaigre','bouffe','carrefour','resto','restaurant','repas','nourriture','manger','déjeuner','diner','dîner','brunch','café','cafe','pain','marché','marche','super','supermarché','supermarche','boutique','shop','courses','food','snack','maquis','drink','boisson','eau','jus','oeuf','œuf','oeufs','lait','riz','attiéké','attieke','poulet','poisson','viande','légume','legume','fruit','tomate','oignon','banane','plantain','sucre','sel','huile','farine','yaourt','fromage','beurre','chocolat','biscuit','gâteau','gateau','bonbon',
       'tangana','dibiterie','gargotte','gargote','thiebou','ceebu','yassa','mafé','mafe','sandwich','chawarma','chawarma','fataya','ndambe',
       'thiakry','bissap jus','bouye','ditakh','arachide','mil','mais','maïs','manioc','patate','gombo','niebe','niébé','poivron','piment','ail','gingembre']],
     ['Transport',['taxi','transport','carburant','essence','gasoil','lavage','auto','voiture','bus','moto','parking','uber','yango','heetch','fret',
@@ -3398,6 +3415,94 @@ function renderNegBanner(){
   var s = soldeActuel();
   b.style.display = s < 0 ? 'flex' : 'none';
   if(s < 0) document.getElementById('lite-neg-text').textContent = 'Solde négatif (' + fmt(s) + ') : d\'où vient l\'argent ?';
+}
+
+/* ---------- comparaison avec un releve (banque, Wave) ----------
+   Les releves connaissent chaque paiement ; l'app, seulement ce qu'on a pense a
+   taper. On colle le releve, l'app apparie chaque ligne a une entree existante
+   (meme sens, meme montant, a 2 jours pres, chaque entree servant une seule fois,
+   la plus proche en date d'abord) et propose d'ajouter le reste.
+   Depots, retraits et transferts entre ses propres comptes deplacent son argent
+   sans le depenser : marques « interne » et decoches par defaut, sinon ils
+   compteraient comme gains ou depenses. */
+var RELEVE = [];
+var RELEVE_INTERNE = /(^|[\s'’])(d[ée]p[ôo]t|retrait|transferts?|vers carte|depuis carte)(?=[\s,.]|$)/i;
+var RELEVE_JOURS = 2;
+function compareReleve(texte){
+  var pris = {}, res = [];
+  String(texte || '').split('\n').forEach(function(l){
+    var ligne = l.trim();
+    if(!ligne) return;
+    var p = parseEntryLine(ligne, today());
+    if(!p){ res.push({ ligne: ligne, etat: 'illisible', coche: false }); return; }
+    var meilleur = null, ecart = 99;
+    entries.forEach(function(e){
+      if(pris[e.id] || e.type !== p.type || Math.round(e.amount) !== Math.round(p.amount)) return;
+      var j = Math.abs(daysBetween(e.date, p.date));
+      if(j <= RELEVE_JOURS && j < ecart){ meilleur = e; ecart = j; }
+    });
+    if(meilleur) pris[meilleur.id] = 1;
+    var interne = RELEVE_INTERNE.test(p.desc);
+    res.push({ ligne: ligne, p: p, match: meilleur,
+      etat: meilleur ? 'saisi' : interne ? 'interne' : 'manquant',
+      coche: !meilleur && !interne });
+  });
+  return res;
+}
+function runReleve(){
+  RELEVE = compareReleve(document.getElementById('releve-input').value);
+  renderReleve();
+}
+function renderReleve(){
+  var box = document.getElementById('releve-result');
+  if(!box) return;
+  if(!RELEVE.length){ box.innerHTML = '<div class="empty">Colle au moins une ligne, puis appuie sur Comparer.</div>'; return; }
+  var n = { saisi: 0, manquant: 0, interne: 0, illisible: 0 };
+  RELEVE.forEach(function(r){ n[r.etat]++; });
+  var html = '<div style="font-size:13px;margin-bottom:8px"><b class="gain-color">✔ ' + n.saisi + ' déjà saisie(s)</b> · ' +
+    '<b class="dep-color">✚ ' + n.manquant + ' manquante(s)</b>' + (n.interne ? ' · ↔ ' + n.interne + ' interne(s)' : '') +
+    (n.illisible ? ' · ⚠ ' + n.illisible + ' illisible(s)' : '') + '</div>';
+  html += RELEVE.map(function(r, i){
+    if(r.etat === 'illisible'){
+      return '<div class="releve-row" style="color:var(--dep-strong)">⚠ <b>' + esc(r.ligne) + '</b> — montant introuvable</div>';
+    }
+    var p = r.p, montant = '<span class="' + (p.type === 'gain' ? 'gain-color' : 'dep-color') + '" style="font-weight:700;white-space:nowrap">' +
+      (p.type === 'gain' ? '+' : '−') + Math.round(p.amount).toLocaleString('fr-FR') + '</span>';
+    var titre = '<div style="flex:1;min-width:0"><div style="font-weight:550">' + esc(p.desc) + '</div><div style="font-size:12px;color:var(--text-3)">' + fmtDateFR(p.date) + ' · ';
+    if(r.etat === 'saisi'){
+      return '<div class="releve-row"><span class="gain-color" aria-label="Déjà saisi">✔</span>' + titre +
+        'déjà saisi : « ' + esc(r.match.desc || r.match.cat) + ' » du ' + fmtDateFR(r.match.date) + '</div></div>' + montant + '</div>';
+    }
+    return '<label class="releve-row" style="cursor:pointer"><input type="checkbox"' + (r.coche ? ' checked' : '') +
+      ' onchange="RELEVE[' + i + '].coche = this.checked; majReleveBouton()" style="width:22px;height:22px;min-height:0;flex:0 0 auto">' +
+      titre + (r.etat === 'interne' ? 'mouvement entre tes comptes, pas une dépense' : '→ ' + esc(p.cat)) + '</div></div>' + montant + '</label>';
+  }).join('');
+  html += '<button class="btn btn-primary" id="releve-add" style="width:100%;margin-top:12px" onclick="addReleve()"></button>' +
+    '<div id="releve-msg" style="font-size:13px;margin-top:8px"></div>';
+  box.innerHTML = html;
+  majReleveBouton();
+}
+function majReleveBouton(){
+  var b = document.getElementById('releve-add');
+  if(!b) return;
+  var c = RELEVE.filter(function(r){ return r.coche; });
+  b.disabled = !c.length;
+  b.textContent = c.length ? 'Ajouter les ' + c.length + ' opération(s) cochée(s)' : 'Rien à ajouter';
+}
+function addReleve(){
+  var c = RELEVE.filter(function(r){ return r.coche && r.p; });
+  if(!c.length) return;
+  c.forEach(function(r){
+    entries.push({ id: nextId(), date: r.p.date, type: r.p.type, cat: r.p.cat, amount: r.p.amount, desc: r.p.desc });
+  });
+  sortEntries();
+  save().then(function(){
+    renderAll();
+    RELEVE = compareReleve(document.getElementById('releve-input').value);   // les ajoutees passent en ✔
+    renderReleve();
+    var m = document.getElementById('releve-msg');
+    if(m){ m.style.color = GAIN_COL; m.textContent = '✓ ' + c.length + ' opération(s) ajoutée(s).'; }
+  });
 }
 
 /* ---------- notes ---------- */
