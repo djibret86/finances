@@ -215,6 +215,8 @@ body{
 #lite-ops .entry-item + .ops-month{border-top:none}
 
 /* ---------- Comparaison avec un releve ------------------- */
+.pro-btn{flex:0 0 auto;min-height:32px;padding:0 8px;font-size:12px;border-radius:999px}
+.pro-btn.on{background:var(--surface-2);border-color:var(--text-3)}
 .releve-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid var(--line-soft);font-size:14px;
   text-transform:none;letter-spacing:0;color:var(--text);margin:0;font-weight:400}
 
@@ -979,6 +981,7 @@ details[open] summary::after{transform:rotate(-135deg)}
       <div style="font-size:13px;color:var(--text-3);line-height:1.5;margin-bottom:8px">
         Colle les opérations de ta banque ou de Wave, une par ligne, avec la date à la fin.
         <b>Mets + devant les entrées d'argent.</b> L'app repère ce qui est déjà saisi et te propose le reste.
+        Touche <b>Pro ?</b> sur un paiement de ton entreprise : il ne sera jamais compté, et l'app s'en souviendra.
       </div>
       <textarea id="releve-input" rows="5" placeholder="Maquis Sandy -4300 28/10&#10;De Doudou +16000 31/10&#10;Dépôt +20000 27/10" style="font-family:inherit;font-size:15px;line-height:1.5"></textarea>
       <div style="display:flex;justify-content:flex-end;margin-top:10px">
@@ -1488,6 +1491,9 @@ function load(){
     return storageGet('budget_notes');
   }).then(function(r){
     if(r && r.value){ try { notes = sanitizeNotes(JSON.parse(r.value)); } catch(e){} }
+    return storageGet('budget_pro_names');
+  }).then(function(r){
+    if(r && r.value){ try { proNames = JSON.parse(r.value) || {}; } catch(e){} }
     soldeConnu = soldeActuel();
     setStorageStatus(true);
   });
@@ -3428,6 +3434,26 @@ function renderNegBanner(){
 var RELEVE = [];
 var RELEVE_INTERNE = /(^|[\s'’])(d[ée]p[ôo]t|retrait|transferts?|vers carte|depuis carte)(?=[\s,.]|$)/i;
 var RELEVE_JOURS = 2;
+/* Paiements de l'entreprise recus sur le mobile money : ils sont geres par une
+   autre app et ne doivent jamais entrer dans les comptes perso. On retient le nom
+   de l'emetteur ou du beneficiaire (« De Fifi » -> « fifi ») marque « Pro » : au
+   releve suivant, ses lignes sont mises de cote d'office. */
+var proNames = {};
+function saveProNames(){ return storageSet('budget_pro_names', JSON.stringify(proNames)); }
+function proKey(desc){
+  return String(desc || '').toLowerCase()
+    .replace(/^\s*(de|d'|d’|à|a|vers|paiement|transfert)\s+/, '')
+    .replace(/\s+/g, ' ').trim();
+}
+function estPro(desc){ var k = proKey(desc); return !!(k && proNames[k]); }
+function toggleProReleve(i){
+  var r = RELEVE[i];
+  if(!r || !r.p) return;
+  var k = proKey(r.p.desc);
+  if(!k) return;
+  if(proNames[k]) delete proNames[k]; else proNames[k] = 1;
+  saveProNames().then(runReleve);
+}
 function compareReleve(texte){
   var pris = {}, res = [];
   String(texte || '').split('\n').forEach(function(l){
@@ -3442,10 +3468,10 @@ function compareReleve(texte){
       if(j <= RELEVE_JOURS && j < ecart){ meilleur = e; ecart = j; }
     });
     if(meilleur) pris[meilleur.id] = 1;
-    var interne = RELEVE_INTERNE.test(p.desc);
-    res.push({ ligne: ligne, p: p, match: meilleur,
-      etat: meilleur ? 'saisi' : interne ? 'interne' : 'manquant',
-      coche: !meilleur && !interne });
+    var interne = RELEVE_INTERNE.test(p.desc), pro = estPro(p.desc);
+    res.push({ ligne: ligne, p: p, match: meilleur, pro: pro,
+      etat: meilleur ? 'saisi' : pro ? 'pro' : interne ? 'interne' : 'manquant',
+      coche: !meilleur && !pro && !interne });
   });
   return res;
 }
@@ -3457,10 +3483,11 @@ function renderReleve(){
   var box = document.getElementById('releve-result');
   if(!box) return;
   if(!RELEVE.length){ box.innerHTML = '<div class="empty">Colle au moins une ligne, puis appuie sur Comparer.</div>'; return; }
-  var n = { saisi: 0, manquant: 0, interne: 0, illisible: 0 };
+  var n = { saisi: 0, manquant: 0, interne: 0, pro: 0, illisible: 0 };
   RELEVE.forEach(function(r){ n[r.etat]++; });
   var html = '<div style="font-size:13px;margin-bottom:8px"><b class="gain-color">✔ ' + n.saisi + ' déjà saisie(s)</b> · ' +
     '<b class="dep-color">✚ ' + n.manquant + ' manquante(s)</b>' + (n.interne ? ' · ↔ ' + n.interne + ' interne(s)' : '') +
+    (n.pro ? ' · 🏢 ' + n.pro + ' pro' : '') +
     (n.illisible ? ' · ⚠ ' + n.illisible + ' illisible(s)' : '') + '</div>';
   html += RELEVE.map(function(r, i){
     if(r.etat === 'illisible'){
@@ -3471,11 +3498,18 @@ function renderReleve(){
     var titre = '<div style="flex:1;min-width:0"><div style="font-weight:550">' + esc(p.desc) + '</div><div style="font-size:12px;color:var(--text-3)">' + fmtDateFR(p.date) + ' · ';
     if(r.etat === 'saisi'){
       return '<div class="releve-row"><span class="gain-color" aria-label="Déjà saisi">✔</span>' + titre +
-        'déjà saisi : « ' + esc(r.match.desc || r.match.cat) + ' » du ' + fmtDateFR(r.match.date) + '</div></div>' + montant + '</div>';
+        'déjà saisi : « ' + esc(r.match.desc || r.match.cat) + ' » du ' + fmtDateFR(r.match.date) +
+        (r.pro ? ' <span class="dep-color">· ⚠ nom marqué Pro : vérifie cette entrée</span>' : '') + '</div></div>' + montant + '</div>';
+    }
+    var proBtn = '<button type="button" class="btn btn-sm pro-btn' + (r.etat === 'pro' ? ' on' : '') + '" onclick="event.preventDefault(); toggleProReleve(' + i + ')"' +
+      ' title="' + (r.etat === 'pro' ? 'Remettre en perso' : 'Paiement de l\'entreprise : ne pas compter') + '">' + (r.etat === 'pro' ? '🏢 Pro' : 'Pro ?') + '</button>';
+    if(r.etat === 'pro'){
+      return '<div class="releve-row" style="opacity:.75"><span aria-label="Entreprise">🏢</span>' + titre +
+        'entreprise : géré dans une autre app, pas ajouté</div></div>' + montant + proBtn + '</div>';
     }
     return '<label class="releve-row" style="cursor:pointer"><input type="checkbox"' + (r.coche ? ' checked' : '') +
       ' onchange="RELEVE[' + i + '].coche = this.checked; majReleveBouton()" style="width:22px;height:22px;min-height:0;flex:0 0 auto">' +
-      titre + (r.etat === 'interne' ? 'mouvement entre tes comptes, pas une dépense' : '→ ' + esc(p.cat)) + '</div></div>' + montant + '</label>';
+      titre + (r.etat === 'interne' ? 'mouvement entre tes comptes, pas une dépense' : '→ ' + esc(p.cat)) + '</div></div>' + montant + proBtn + '</label>';
   }).join('');
   html += '<button class="btn btn-primary" id="releve-add" style="width:100%;margin-top:12px" onclick="addReleve()"></button>' +
     '<div id="releve-msg" style="font-size:13px;margin-top:8px"></div>';
@@ -4167,7 +4201,7 @@ function exportCSV(){
 }
 function backupBlob(){
   var d = { entries: entries, budgets: budgets, shortcuts: shortcuts, planned: planned,
-            learnedCats: learnedCats, checkpoints: checkpoints, customCats: customCats, recurrents: recurrents, recIgnored: recIgnored, notes: notes, exported_at: new Date().toISOString() };
+            learnedCats: learnedCats, checkpoints: checkpoints, customCats: customCats, recurrents: recurrents, recIgnored: recIgnored, notes: notes, proNames: proNames, exported_at: new Date().toISOString() };
   return new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
 }
 function backupName(){ return 'finances_backup_' + today() + '.json'; }
@@ -4369,13 +4403,15 @@ function importJSON(ev){
         planned.sort(function(a, b){ return a.date.localeCompare(b.date); });
         syncIdCounter();
         var RC = sanitizeRecurrents(d.recurrents), NT = sanitizeNotes(d.notes);
+        var PN = (d.proNames && typeof d.proNames === 'object') ? d.proNames : {};
+        if(rep) proNames = PN; else Object.keys(PN).forEach(function(k){ proNames[k] = 1; });
         if(rep){ recurrents = RC; notes = NT; recIgnored = (d.recIgnored && typeof d.recIgnored === 'object') ? d.recIgnored : {}; }
         else {
           RC.forEach(function(x){ if(!recurrents.some(function(y){ return y.id === x.id; })) recurrents.push(x); });
           NT.forEach(function(x){ if(!notes.some(function(y){ return y.id === x.id; })) notes.push(x); });
         }
         soldeConnu = soldeActuel();   // une restauration n'est pas une depense : pas de question
-        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats(), saveRecurrents(), saveNotes()]).then(function(){
+        return Promise.all([save(), saveBudgets(), saveShortcuts(), savePlanned(), saveLearned(), saveCheckpoints(), saveCustomCats(), saveRecurrents(), saveNotes(), saveProNames()]).then(function(){
           updateCats();
           msg.style.color = GAIN_COL;
           msg.textContent = '✓ Restauré — ' + entries.length + ' entrée(s), ' + planned.length + ' prévision(s).';

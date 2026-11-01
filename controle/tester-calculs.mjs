@@ -184,6 +184,11 @@ try {
       rel.map(r => r.etat), ['saisi', 'manquant', 'manquant', 'manquant', 'interne', 'interne', 'illisible']);
     ok('Relevé : seules les manquantes sont cochées', rel.map(r => r.coche), [false, true, true, true, false, false, false]);
     ok('Relevé : le sens vient du signe', rel[3].p.type, 'gain');
+    proNames = { 'fifi': 1 };
+    const relPro = compareReleve('De Fifi +12120 20/10/2026\nDe Doudou +16000 31/10/2026');
+    ok('Relevé : nom marqué Pro mis de côté, jamais coché', relPro.map(r => r.etat + ':' + r.coche), ['pro:false', 'manquant:true']);
+    ok('Nom pro : « De », « À », « Paiement » ignorés', [proKey('De Fifi'), proKey('À Green Shop'), proKey('Paiement SANDY BOISSON')], ['fifi', 'green shop', 'sandy boisson']);
+    proNames = {};
 
     // --- Notes ---
     ok('Notes valides seulement', sanitizeNotes([{ id: 1, date: '2026-10-20', text: 'Rembourser Koffi' }, { date: 'x', text: 'a' }, { id: 3, date: '2026-10-21', text: '  ' }]).length, 1);
