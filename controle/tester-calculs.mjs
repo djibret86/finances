@@ -190,6 +190,25 @@ try {
     ok('Nom pro : « De », « À », « Paiement » ignorés', [proKey('De Fifi'), proKey('À Green Shop'), proKey('Paiement SANDY BOISSON')], ['fifi', 'green shop', 'sandy boisson']);
     proNames = {};
 
+    // --- Application dédiée aux finances personnelles ---
+    ok('Plus de catégories de l\'entreprise', [CATS.gain.indexOf('Vente'), CATS.depense.indexOf('Matières premières')], [-1, -1]);
+    ok('Liqueur achetée = Alcool, plus Matières premières', autoCat('Liqueur', 'depense'), 'Alcool');
+    entries = [
+      { id: 1, date: '2026-10-10', type: 'gain', cat: 'Vente', amount: 30000, desc: 'Vente liqueur' },
+      { id: 2, date: '2026-10-11', type: 'depense', cat: 'Matières premières', amount: 12000, desc: 'Ananas' },
+      { id: 3, date: '2026-10-12', type: 'depense', cat: 'Achat', amount: 8000, desc: 'Achat stock bouteilles' },
+      { id: 4, date: '2026-10-13', type: 'gain', cat: 'Autre', amount: 4040, desc: 'De Fifi' },
+      { id: 5, date: '2026-10-14', type: 'depense', cat: 'Alimentation', amount: 2000, desc: 'Pain' }
+    ];
+    proNames = { 'fifi': 1 };
+    ok('Opérations de l\'entreprise repérées', proCandidates().map(e => e.id), [1, 2, 3, 4]);
+    budgets = { 'Matières premières': 50000, Alimentation: 30000 };
+    ok('Retrait : seules les cochées partent', retirerPro([1, 2, 4]), 3);
+    ok('Retrait : reste perso + la ligne décochée', entries.map(e => e.id), [3, 5]);
+    ok('Ligne gardée : plus reproposée', proCandidates().length, 0);
+    ok('Retrait : budget de l\'entreprise oublié', Object.keys(budgets), ['Alimentation']);
+    proNames = {};
+
     // --- Notes ---
     ok('Notes valides seulement', sanitizeNotes([{ id: 1, date: '2026-10-20', text: 'Rembourser Koffi' }, { date: 'x', text: 'a' }, { id: 3, date: '2026-10-21', text: '  ' }]).length, 1);
     return r;
